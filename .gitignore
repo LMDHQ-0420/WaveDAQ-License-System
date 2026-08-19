@@ -1,0 +1,14 @@
+.env
+.env.*
+!.env.example
+.dev.vars
+.wrangler/
+node_modules/
+.venv/
+dist/
+build/
+__pycache__/
+*.py[cod]
+*.p12
+*.pem
+secrets/

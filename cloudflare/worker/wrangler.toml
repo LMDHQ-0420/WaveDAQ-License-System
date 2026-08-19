@@ -1,0 +1,16 @@
+name = "wavedaq-license-worker"
+main = "src/index.ts"
+compatibility_date = "2026-08-19"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "wavedaq-license"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+[vars]
+LICENSE_SCHEMA_VERSION = "1"
+
+[assets]
+directory = "../admin/dist"
+not_found_handling = "single-page-application"

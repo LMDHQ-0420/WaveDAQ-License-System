@@ -1,0 +1,9 @@
+{
+  "name": "wavedaq-license-cloudflare",
+  "private": true,
+  "scripts": {
+    "install:all": "npm --prefix admin install && npm --prefix worker install",
+    "build:admin": "npm --prefix admin run build",
+    "deploy": "npm run build:admin && npm --prefix worker run deploy"
+  }
+}
