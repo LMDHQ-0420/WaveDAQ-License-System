@@ -21,13 +21,16 @@ python3 ../../tools/generate_signing_key.py
 ```bash
 npx wrangler secret put LICENSE_SIGNING_PRIVATE_KEY
 npx wrangler secret put ADMIN_TOKEN
+npx wrangler secret put GITHUB_TOKEN
 ```
 
 核心 API：
 
 ```text
 POST /api/activate
-GET  /api/releases?license_id=...&device_id=...
+GET  /api/releases?license_id=...
+POST /api/license/refresh?license_id=...
+GET  /api/download/:release_id?license_id=...
 GET  /api/admin/licenses
 POST /api/admin/products
 POST /api/admin/licenses
@@ -44,3 +47,13 @@ POST /api/admin/devices/:id/revoke
 撤销会阻止后续在线 API 使用；已经签发且允许离线运行的授权，在其有效期/离线宽限期内仍可能继续运行，这是离线软件授权无法避免的取舍。
 
 管理 API 使用 `Authorization: Bearer <ADMIN_TOKEN>`。生产环境还应在管理路径前配置 Cloudflare Access。
+
+设备接口还要求 `X-Device-Id`、`X-Device-Timestamp`、`X-Device-Nonce` 和 `X-Device-Signature`。签名由设备私钥生成，服务端会拒绝过期请求和重复 nonce。
+
+私有 Release 的 `asset_url` 必须使用 GitHub API 返回的 Asset API URL，例如：
+
+```text
+https://api.github.com/repos/LMDHQ-0420/WaveDAQ/releases/assets/123456
+```
+
+Worker 只会向 `api.github.com/repos/LMDHQ-0420/.../releases/assets/...` 发送 GitHub Token，数据库中的其他地址会被拒绝。

@@ -1,18 +1,22 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import shutil
 import tempfile
 from pathlib import Path
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 
-def download_verified(url: str, expected_sha256: str, destination: Path) -> Path:
+def download_verified(url: str, expected_sha256: str, destination: Path, headers: dict[str, str] | None = None) -> Path:
     destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = Path(tempfile.mkstemp(prefix="wavedaq-download-", suffix=".part", dir=destination.parent)[1])
+    descriptor, temporary_name = tempfile.mkstemp(prefix="wavedaq-download-", suffix=".part", dir=destination.parent)
+    os.close(descriptor)
+    temporary = Path(temporary_name)
     digest = hashlib.sha256()
     try:
-        with urlopen(url, timeout=60) as response, temporary.open("wb") as output:
+        request = Request(url, headers=headers or {})
+        with urlopen(request, timeout=60) as response, temporary.open("wb") as output:
             while chunk := response.read(1024 * 1024):
                 digest.update(chunk)
                 output.write(chunk)

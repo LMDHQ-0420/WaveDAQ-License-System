@@ -18,10 +18,10 @@ Launcher → Cloudflare /api/activate → D1
                                       ↓
 Launcher ← 服务器签名授权文件 ←───────┘
     ↓
-离线验证设备私钥、授权签名、型号、版本和有效期
+离线验证设备私钥、授权签名、型号、版本、有效期和离线宽限期
 ```
 
-真实 WaveDAQ 运行时必须再次执行本地授权验证，不能只依赖 Launcher。
+真实 WaveDAQ 运行时必须再次执行本地授权验证，不能只依赖 Launcher。当前 `WaveDAQ` 仓库已经接入同协议的启动前校验。
 
 ## 开发顺序
 
@@ -39,7 +39,7 @@ npm run install:all
 npm run build:admin
 ```
 
-生产部署前，需要创建 D1 数据库、应用迁移，并配置 `LICENSE_SIGNING_PRIVATE_KEY` 和 `ADMIN_TOKEN` Secret。
+生产部署前，需要创建 D1 数据库、应用全部迁移，并配置 `LICENSE_SIGNING_PRIVATE_KEY`、`ADMIN_TOKEN` 和只读 `GITHUB_TOKEN` Secret。
 
 ## 安全说明
 

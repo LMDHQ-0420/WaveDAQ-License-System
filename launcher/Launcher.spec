@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_submodules
 
-hiddenimports = collect_submodules("cryptography")
+hiddenimports = collect_submodules("cryptography") + collect_submodules("keyring.backends")
 
 a = Analysis(
     ["src/main.py"],
@@ -26,6 +26,6 @@ exe = EXE(
     debug=False,
     strip=False,
     upx=True,
-    console=False,
+    console=True,
     onefile=True,
 )

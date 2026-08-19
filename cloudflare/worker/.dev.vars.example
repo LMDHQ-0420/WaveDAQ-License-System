@@ -1,2 +1,3 @@
 ADMIN_TOKEN="replace-for-local-development"
 LICENSE_SIGNING_PRIVATE_KEY='{"kty":"OKP","crv":"Ed25519","x":"...","d":"..."}'
+GITHUB_TOKEN="fine-grained-token-with-read-only-access-to-private-releases"

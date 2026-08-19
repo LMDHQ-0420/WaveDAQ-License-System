@@ -10,7 +10,11 @@
     "product_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,63}$" },
     "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$" },
     "platform": { "type": "string", "enum": ["macos-arm64", "macos-x64", "windows-x64"] },
-    "asset_url": { "type": "string", "format": "uri" },
+    "asset_url": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://api\\.github\\.com/repos/LMDHQ-0420/[^/]+/releases/assets/[0-9]+$"
+    },
     "sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
     "signature": { "type": ["string", "null"] },
     "status": { "type": "string", "enum": ["active", "hidden"] }

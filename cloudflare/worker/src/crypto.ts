@@ -33,6 +33,11 @@ export async function importEd25519PrivateKey(value: string): Promise<CryptoKey>
   return crypto.subtle.importKey("jwk", JSON.parse(value), { name: "Ed25519" }, false, ["sign"]);
 }
 
+export async function verifyEd25519(publicKey: string, message: string, signature: string): Promise<boolean> {
+  const key = await crypto.subtle.importKey("raw", base64urlDecode(publicKey), { name: "Ed25519" }, false, ["verify"]);
+  return crypto.subtle.verify("Ed25519", key, base64urlDecode(signature), new TextEncoder().encode(message));
+}
+
 export async function signLicense(license: Omit<LicenseDocument, "signature">, privateKeyJwk: string): Promise<string> {
   const key = await importEd25519PrivateKey(privateKeyJwk);
   const signature = await crypto.subtle.sign("Ed25519", key, new TextEncoder().encode(canonicalLicensePayload(license)));

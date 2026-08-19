@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import base64
 import json
+import time
 from datetime import datetime, timezone
 from typing import Any
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+import keyring
+
+CLOCK_SERVICE = "WaveDAQ License Clock"
 
 
 def _unb64(value: str) -> bytes:
@@ -39,7 +43,11 @@ def verify_device_binding(license_document: dict[str, Any], identity: dict[str, 
         raise ValueError("设备公钥不匹配")
     challenge = b"wavedaq-local-license-check"
     from src.device_identity import private_key
-    private_key(identity).public_key().verify(private_key(identity).sign(challenge), challenge)
+    private = private_key(identity)
+    derived_public = base64.urlsafe_b64encode(private.public_key().public_bytes_raw()).decode("ascii").rstrip("=")
+    if derived_public != identity["public_key"]:
+        raise ValueError("系统安全存储中的私钥与设备公钥不匹配")
+    private.public_key().verify(private.sign(challenge), challenge)
 
 
 def verify_expiry(license_document: dict[str, Any]) -> None:
@@ -49,11 +57,23 @@ def verify_expiry(license_document: dict[str, Any]) -> None:
         if datetime.now(timezone.utc) >= expiry:
             raise ValueError("授权已过期")
 
+    grace_days = int(license_document.get("offline_grace_days", 0))
+    issued_at = license_document.get("issued_at")
+    if grace_days > 0 and issued_at:
+        issued = datetime.fromisoformat(str(issued_at).replace("Z", "+00:00"))
+        if (datetime.now(timezone.utc) - issued).total_seconds() > grace_days * 86400:
+            raise ValueError("离线授权宽限期已结束，请联网刷新授权")
+
 
 def verify_license(license_document: dict[str, Any], identity: dict[str, str], server_public_key: str) -> None:
     verify_signature(license_document, server_public_key)
     verify_device_binding(license_document, identity)
     verify_expiry(license_document)
+    now = time.time()
+    last_value = keyring.get_password(CLOCK_SERVICE, identity["device_id"])
+    if last_value and now + 300 < float(last_value):
+        raise ValueError("检测到系统时间回拨，无法验证离线授权")
+    keyring.set_password(CLOCK_SERVICE, identity["device_id"], str(max(now, float(last_value or 0))))
 
 
 def allows(license_document: dict[str, Any], product_id: str, version: str, platform: str) -> bool:

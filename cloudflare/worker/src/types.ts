@@ -3,6 +3,7 @@ export interface Env {
   LICENSE_SCHEMA_VERSION: string;
   LICENSE_SIGNING_PRIVATE_KEY?: string;
   ADMIN_TOKEN?: string;
+  GITHUB_TOKEN?: string;
 }
 
 export interface ProductPermission {

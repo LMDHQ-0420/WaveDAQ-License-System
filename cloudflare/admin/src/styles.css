@@ -7,10 +7,14 @@ header { display: flex; justify-content: space-between; align-items: end; gap: 2
 h1, h2 { margin: 0; } h1 { font-size: 36px; letter-spacing: -.04em; } h2 { font-size: 18px; }
 .status { color: #8d9bb0; font-size: 13px; }
 .card { background: #121b29; border: 1px solid #243148; border-radius: 16px; padding: 22px; margin-top: 18px; box-shadow: 0 12px 36px #05080d55; }
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; } .grid .card { display: flex; flex-direction: column; gap: 10px; }
 .auth { display: flex; align-items: end; gap: 16px; } label { color: #aebbd0; font-size: 13px; flex: 1; } input { display: block; width: 100%; margin-top: 8px; padding: 12px 14px; color: #e8eef7; background: #0b111b; border: 1px solid #30415e; border-radius: 9px; }
+select { width: 100%; padding: 12px 14px; color: #e8eef7; background: #0b111b; border: 1px solid #30415e; border-radius: 9px; }
 button { border: 0; border-radius: 9px; padding: 12px 18px; color: white; background: #356dff; cursor: pointer; font-weight: 600; } button:hover { background: #4d7fff; }
+.danger { padding: 6px 10px; background: #7f2933; } .danger:hover { background: #a53845; }
 .section-title { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; } .section-title span { color: #8d9bb0; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; } th, td { padding: 13px 10px; text-align: left; border-bottom: 1px solid #243148; } th { color: #8d9bb0; font-weight: 500; }
 .badge { display: inline-block; padding: 4px 8px; border-radius: 999px; font-size: 12px; background: #26344b; } .badge.active { color: #9bf0c0; background: #143b2a; } .badge.revoked { color: #ffaaa7; background: #4b2025; }
 .empty { color: #8d9bb0; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
 @media (max-width: 700px) { header, .auth { align-items: stretch; flex-direction: column; } table { display: block; overflow-x: auto; white-space: nowrap; } }
