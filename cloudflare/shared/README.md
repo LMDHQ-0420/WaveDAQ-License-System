@@ -1,6 +1,6 @@
 # Shared Protocols
 
-保存授权文件、产品型号和版本清单的共享数据结构定义。
+保存 Launcher 与 Cloudflare 共同使用的授权文件、产品型号和版本清单数据结构定义。
 
 ## License 文件规则
 

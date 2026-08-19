@@ -4,6 +4,7 @@ import json
 import time
 import uuid
 from pathlib import Path
+from collections.abc import Callable
 from urllib.parse import urlencode
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -62,7 +63,7 @@ class LicenseApi:
     def refresh(self, license_id: str, identity: dict[str, str]) -> dict[str, Any]:
         return self._signed_request("POST", "/api/license/refresh", license_id, identity)
 
-    def download(self, download_path: str, license_id: str, identity: dict[str, str], expected_sha256: str, destination: Path) -> Path:
+    def download(self, download_path: str, license_id: str, identity: dict[str, str], expected_sha256: str, destination: Path, progress: Callable[[int, int], None] | None = None) -> Path:
         path = download_path.split("?", 1)[0]
         headers = self._device_headers("GET", path, license_id, identity)
-        return download_verified(self.base_url + download_path, expected_sha256, destination, headers)
+        return download_verified(self.base_url + download_path, expected_sha256, destination, headers, progress)

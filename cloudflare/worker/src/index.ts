@@ -5,7 +5,7 @@ import type { Env, LicenseDocument, ProductPermission } from "./types";
 interface ActivateRequest { activation_code: string; device_id: string; device_public_key: string; fingerprint?: string; }
 interface CreateLicenseRequest { license_id?: string; activation_code: string; expires_at?: string | null; offline_grace_days?: number; products: ProductPermission[]; }
 interface CreateProductRequest { id: string; name: string; description?: string; }
-interface CreateReleaseRequest { id: string; product_id: string; version: string; platform: string; asset_url: string; sha256: string; signature?: string | null; }
+interface CreateReleaseRequest { id: string; product_id: string; version: string; platform: string; asset_url: string; sha256: string; file_name: string; launch_path: string; signature?: string | null; }
 interface DeviceAuth { licenseId: string; deviceId: string; publicKey: string; }
 
 function id(prefix: string): string { return `${prefix}_${crypto.randomUUID().replaceAll("-", "")}`; }
@@ -63,7 +63,7 @@ async function authenticateDevice(request: Request, env: Env): Promise<DeviceAut
 async function activate(request: Request, env: Env): Promise<Response> {
   const input = await body<ActivateRequest>(request);
   if (!input.activation_code || !/^dev_[a-f0-9]{32}$/.test(input.device_id) || !/^[A-Za-z0-9_-]{43}$/.test(input.device_public_key)) return error("激活参数格式无效");
-  const codeHash = await sha256(input.activation_code.trim());
+  const codeHash = await sha256(input.activation_code.trim().toUpperCase());
   const license = await env.DB.prepare("SELECT id, status, expires_at FROM licenses WHERE code_hash = ?").bind(codeHash).first<{ id: string; status: string; expires_at: string | null }>();
   if (!license) return error("激活码无效", 403);
   if (license.status !== "unused") return error("激活码已使用或已撤销", 409);
@@ -86,9 +86,10 @@ async function activate(request: Request, env: Env): Promise<Response> {
 async function releases(request: Request, env: Env): Promise<Response> {
   const auth = await authenticateDevice(request, env); if (auth instanceof Response) return auth;
   const grants = await env.DB.prepare("SELECT product_id, version_ranges_json, platforms_json FROM license_products WHERE license_id = ?").bind(auth.licenseId).all<{ product_id: string; version_ranges_json: string; platforms_json: string }>();
-  const rows = await env.DB.prepare("SELECT id, product_id, version, platform, sha256, signature FROM releases WHERE status = 'active'").all<{ id: string; product_id: string; version: string; platform: string; sha256: string; signature: string | null }>();
+  const products = await env.DB.prepare("SELECT p.id, p.name, p.description FROM products p JOIN license_products lp ON lp.product_id = p.id WHERE lp.license_id = ? AND p.status = 'active'").bind(auth.licenseId).all<{ id: string; name: string; description: string }>();
+  const rows = await env.DB.prepare("SELECT id, product_id, version, platform, sha256, signature, file_name, launch_path FROM releases WHERE status = 'active'").all<{ id: string; product_id: string; version: string; platform: string; sha256: string; signature: string | null; file_name: string; launch_path: string }>();
   const allowed = rows.results.filter((release) => grants.results.some((grant) => grant.product_id === release.product_id && JSON.parse(grant.platforms_json).includes(release.platform) && versionAllowed(release.version, JSON.parse(grant.version_ranges_json))));
-  return json({ releases: allowed.map((release) => ({ ...release, download_url: `/api/download/${encodeURIComponent(release.id)}?license_id=${encodeURIComponent(auth.licenseId)}` })) });
+  return json({ products: products.results, releases: allowed.map((release) => ({ ...release, download_url: `/api/download/${encodeURIComponent(release.id)}?license_id=${encodeURIComponent(auth.licenseId)}` })) });
 }
 
 async function refreshLicense(request: Request, env: Env): Promise<Response> {
@@ -124,20 +125,20 @@ async function admin(request: Request, env: Env, path: string): Promise<Response
   if (request.method === "GET" && path === "/products") return json({ products: (await env.DB.prepare("SELECT * FROM products ORDER BY created_at DESC").all()).results });
   if (request.method === "GET" && path === "/licenses") return json({ licenses: (await env.DB.prepare("SELECT id, status, expires_at, offline_grace_days, created_at FROM licenses ORDER BY created_at DESC LIMIT 200").all()).results });
   if (request.method === "GET" && path === "/devices") return json({ devices: (await env.DB.prepare("SELECT id, fingerprint, status, created_at, last_seen_at FROM devices ORDER BY created_at DESC LIMIT 200").all()).results });
-  if (request.method === "GET" && path === "/releases") return json({ releases: (await env.DB.prepare("SELECT id, product_id, version, platform, sha256, status, created_at FROM releases ORDER BY created_at DESC LIMIT 200").all()).results });
+  if (request.method === "GET" && path === "/releases") return json({ releases: (await env.DB.prepare("SELECT id, product_id, version, platform, sha256, file_name, launch_path, status, created_at FROM releases ORDER BY created_at DESC LIMIT 200").all()).results });
   if (request.method === "POST" && path === "/products") {
     const input = await body<CreateProductRequest>(request); if (!/^[a-z0-9][a-z0-9-]{1,63}$/.test(input.id) || !input.name) return error("产品字段无效");
     await env.DB.prepare("INSERT INTO products (id, name, description) VALUES (?, ?, ?)").bind(input.id, input.name, input.description ?? "").run(); return json({ id: input.id }, 201);
   }
   if (request.method === "POST" && path === "/licenses") {
     const input = await body<CreateLicenseRequest>(request); if (!input.activation_code || !input.products?.length || !input.products.every(validPermission) || !Number.isInteger(input.offline_grace_days ?? 30) || (input.offline_grace_days ?? 30) < 0 || (input.offline_grace_days ?? 30) > 3650) return error("激活码或产品权限格式无效");
-    const licenseId = input.license_id ?? id("lic"); const hash = await sha256(input.activation_code.trim());
+    const licenseId = input.license_id ?? id("lic"); const hash = await sha256(input.activation_code.trim().toUpperCase());
     const statements = [env.DB.prepare("INSERT INTO licenses (id, code_hash, expires_at, offline_grace_days) VALUES (?, ?, ?, ?)").bind(licenseId, hash, input.expires_at ?? null, input.offline_grace_days ?? 30), ...input.products.map((product) => env.DB.prepare("INSERT INTO license_products (license_id, product_id, version_ranges_json, platforms_json, features_json) VALUES (?, ?, ?, ?, ?)").bind(licenseId, product.product_id, JSON.stringify(product.version_ranges), JSON.stringify(product.platforms), JSON.stringify(product.features ?? [])))];
     await env.DB.batch(statements); return json({ license_id: licenseId }, 201);
   }
   if (request.method === "POST" && path === "/releases") {
-    const input = await body<CreateReleaseRequest>(request); if (!input.id || !input.product_id || !/^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$/.test(input.version) || !PLATFORMS.has(input.platform) || !trustedGithubAsset(input.asset_url) || !/^[a-fA-F0-9]{64}$/.test(input.sha256)) return error("版本字段或 GitHub Asset API 地址无效");
-    await env.DB.prepare("INSERT INTO releases (id, product_id, version, platform, asset_url, sha256, signature) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(input.id, input.product_id, input.version, input.platform, input.asset_url, input.sha256, input.signature ?? null).run(); return json({ id: input.id }, 201);
+    const input = await body<CreateReleaseRequest>(request); if (!input.id || !input.product_id || !/^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$/.test(input.version) || !PLATFORMS.has(input.platform) || !trustedGithubAsset(input.asset_url) || !/^[a-fA-F0-9]{64}$/.test(input.sha256) || !/^[^/\\]{1,180}$/.test(input.file_name) || !input.launch_path || input.launch_path.length > 500) return error("版本字段、文件名、启动路径或 GitHub Asset API 地址无效");
+    await env.DB.prepare("INSERT INTO releases (id, product_id, version, platform, asset_url, sha256, file_name, launch_path, signature) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(input.id, input.product_id, input.version, input.platform, input.asset_url, input.sha256, input.file_name, input.launch_path, input.signature ?? null).run(); return json({ id: input.id }, 201);
   }
   const revokeLicense = path.match(/^\/licenses\/([^/]+)\/revoke$/); if (request.method === "POST" && revokeLicense) { await env.DB.prepare("UPDATE licenses SET status = 'revoked' WHERE id = ?").bind(revokeLicense[1]).run(); return json({ status: "revoked", license_id: revokeLicense[1] }); }
   const revokeDevice = path.match(/^\/devices\/([^/]+)\/revoke$/); if (request.method === "POST" && revokeDevice) { await env.DB.prepare("UPDATE devices SET status = 'revoked' WHERE id = ?").bind(revokeDevice[1]).run(); return json({ status: "revoked", device_id: revokeDevice[1] }); }

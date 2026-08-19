@@ -5,10 +5,11 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
+from collections.abc import Callable
 from urllib.request import Request, urlopen
 
 
-def download_verified(url: str, expected_sha256: str, destination: Path, headers: dict[str, str] | None = None) -> Path:
+def download_verified(url: str, expected_sha256: str, destination: Path, headers: dict[str, str] | None = None, progress: Callable[[int, int], None] | None = None) -> Path:
     destination.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(prefix="wavedaq-download-", suffix=".part", dir=destination.parent)
     os.close(descriptor)
@@ -17,9 +18,14 @@ def download_verified(url: str, expected_sha256: str, destination: Path, headers
     try:
         request = Request(url, headers=headers or {})
         with urlopen(request, timeout=60) as response, temporary.open("wb") as output:
+            total = int(response.headers.get("content-length", "0") or 0)
+            received = 0
             while chunk := response.read(1024 * 1024):
                 digest.update(chunk)
                 output.write(chunk)
+                received += len(chunk)
+                if progress:
+                    progress(received, total)
         if digest.hexdigest().lower() != expected_sha256.lower():
             raise ValueError("软件包 SHA-256 校验失败")
         shutil.move(str(temporary), destination)

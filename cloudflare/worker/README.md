@@ -13,7 +13,7 @@ npx wrangler dev
 生成签名密钥：
 
 ```bash
-python3 ../../tools/generate_signing_key.py
+python3 ../tools/generate_signing_key.py
 ```
 
 生产环境使用 Secret 保存私钥，不要写入 `wrangler.toml`：

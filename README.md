@@ -5,10 +5,11 @@ WaveDAQ 的启动器、离线授权验证、Cloudflare 授权服务和管理后�
 ## 项目结构
 
 ```text
-launcher/             本地启动器和安装器
+launcher/             带窗口的本地启动器、下载器和软件中心
 cloudflare/worker/    Cloudflare Worker API 与 D1 数据库
 cloudflare/admin/     Cloudflare 管理后台前端
-shared/               启动器与服务端共享的数据协议
+cloudflare/shared/    授权、产品和版本协议
+cloudflare/tools/     管理员密钥与激活码工具
 ```
 
 ## 核心流程
@@ -31,7 +32,7 @@ cd launcher
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-PYTHONPATH=. python -m src.main device
+PYTHONPATH=. python -m src.main
 
 # Cloudflare 项目
 cd ../cloudflare

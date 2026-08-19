@@ -1,2 +1,3 @@
 cryptography>=44,<47
 keyring>=25,<27
+PySide6>=6.8,<7

@@ -1,0 +1,2 @@
+ALTER TABLE releases ADD COLUMN file_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE releases ADD COLUMN launch_path TEXT NOT NULL DEFAULT '';

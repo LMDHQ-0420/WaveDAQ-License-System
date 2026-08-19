@@ -4,7 +4,7 @@
   "title": "WaveDAQ Release",
   "type": "object",
   "additionalProperties": false,
-  "required": ["id", "product_id", "version", "platform", "asset_url", "sha256", "status"],
+  "required": ["id", "product_id", "version", "platform", "asset_url", "sha256", "file_name", "launch_path", "status"],
   "properties": {
     "id": { "type": "string", "minLength": 1 },
     "product_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,63}$" },
@@ -16,6 +16,8 @@
       "pattern": "^https://api\\.github\\.com/repos/LMDHQ-0420/[^/]+/releases/assets/[0-9]+$"
     },
     "sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+    "file_name": { "type": "string", "minLength": 1, "maxLength": 180, "pattern": "^[^/\\\\]+$" },
+    "launch_path": { "type": "string", "minLength": 1, "maxLength": 500 },
     "signature": { "type": ["string", "null"] },
     "status": { "type": "string", "enum": ["active", "hidden"] }
   }
