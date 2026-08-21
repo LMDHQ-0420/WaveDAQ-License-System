@@ -1,8 +1,5 @@
 export interface Env {
   DB: D1Database;
-  LICENSE_SCHEMA_VERSION: string;
-  PRODUCT_ID: string;
-  GITHUB_REPOSITORY: string;
   LICENSE_SIGNING_PRIVATE_KEY?: string;
   ADMIN_TOKEN?: string;
   ADMIN_PASSWORD_HASH?: string;
@@ -11,7 +8,6 @@ export interface Env {
 
 export interface ProductPermission {
   product_id: string;
-  version_ranges: string[];
   platforms: string[];
   features?: string[];
 }
@@ -23,7 +19,6 @@ export interface LicenseDocument {
   device_public_key: string;
   issued_at: string;
   expires_at: string | null;
-  offline_grace_days: number;
   products: ProductPermission[];
   metadata?: Record<string, string>;
   signature: string;
@@ -32,5 +27,4 @@ export interface LicenseDocument {
 export interface LicenseRow {
   id: string;
   expires_at: string | null;
-  offline_grace_days: number;
 }

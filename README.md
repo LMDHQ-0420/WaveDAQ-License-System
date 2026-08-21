@@ -133,15 +133,10 @@ WaveDAQ-License-System/
 
 ```python
 PRODUCT_ID = "your-product-id"
-APP_VERSION = "1.0.0"
 SERVER_PUBLIC_KEY = "Cloudflare Worker 使用的 Ed25519 公钥"
-
-DATA_DIRECTORY_NAME = "WaveDAQ-Launcher"
-KEYRING_SERVICE = "WaveDAQ License Device Key"
-CLOCK_SERVICE = "WaveDAQ License Clock"
 ```
 
-`PRODUCT_ID` 必须与管理后台登记的产品 ID 完全一致。产品 ID 创建后不能修改；产品名称只是显示文本。当前系统不在后台维护固定版本号，授权默认允许 `*`，启动器从产品 GitHub 仓库读取最新 Release，并根据平台匹配安装包。`APP_VERSION` 保留用于需要版本限制的产品；如果使用默认的 `*` 授权，它不会限制最新 Release。`SERVER_PUBLIC_KEY` 必须使用授权服务对应的公钥。签名私钥、管理员密码和 GitHub Token 不得放入产品项目。
+`PRODUCT_ID` 必须与管理后台登记的产品 ID 完全一致。产品 ID 创建后不能修改；产品名称只是显示文本。版本号只属于 GitHub Release 的安装信息，不进入授权配置和离线校验。数据库中的旧版本范围列已通过迁移移除。`SERVER_PUBLIC_KEY` 必须使用授权服务对应的公钥。数据目录、系统密钥服务名和授权时钟服务名由 SDK 内部固定，产品不需要配置。签名私钥、管理员密码和 GitHub Token 不得放入产品项目。
 
 #### 3. 在主入口强制验证
 

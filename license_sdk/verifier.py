@@ -12,7 +12,11 @@ from typing import Any
 import keyring
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
-from .config import APP_VERSION, CLOCK_SERVICE, DATA_DIRECTORY_NAME, KEYRING_SERVICE, PRODUCT_ID, SERVER_PUBLIC_KEY
+from .config import PRODUCT_ID, SERVER_PUBLIC_KEY
+
+DATA_DIRECTORY_NAME = "WaveDAQ-Launcher"
+KEYRING_SERVICE = "WaveDAQ License Device Key"
+CLOCK_SERVICE = "WaveDAQ License Clock"
 
 
 class LicenseError(RuntimeError):
@@ -110,15 +114,11 @@ def verify_expiry(document: dict[str, Any]) -> None:
             raise LicenseError("授权已过期")
 
 
-def allows(document: dict[str, Any], product_id: str, version: str, platform_id: str) -> bool:
+def allows(document: dict[str, Any], product_id: str, platform_id: str) -> bool:
     for product in document.get("products", []):
         if product.get("product_id") != product_id or platform_id not in product.get("platforms", []):
             continue
-        for version_range in product.get("version_ranges", []):
-            if version_range == "*" or version_range == version or (
-                version_range.endswith(".*") and version.startswith(version_range[:-1])
-            ):
-                return True
+        return True
     return False
 
 
@@ -135,8 +135,8 @@ def verify_license(document: dict[str, Any], identity: dict[str, str], server_pu
     if now + 300 < last_timestamp:
         raise LicenseError("检测到系统时间回拨，无法验证离线授权")
     keyring.set_password(CLOCK_SERVICE, identity["device_id"], str(max(now, last_timestamp)))
-    if not allows(document, PRODUCT_ID, APP_VERSION, _platform_id()):
-        raise LicenseError("当前设备未获得此产品、版本或平台的授权")
+    if not allows(document, PRODUCT_ID, _platform_id()):
+        raise LicenseError("当前设备未获得此产品或平台的授权")
 
 
 def require_valid_license() -> None:

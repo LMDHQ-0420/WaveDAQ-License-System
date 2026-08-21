@@ -26,8 +26,7 @@ class LicenseTests(unittest.TestCase):
             "device_public_key": encode(device_private.public_key().public_bytes_raw()),
             "issued_at": "2026-08-19T00:00:00Z",
             "expires_at": None,
-            "offline_grace_days": 30,
-            "products": [{"product_id": "wavedaq-8ch", "version_ranges": ["1.0.*"], "platforms": ["macos-arm64"]}],
+            "products": [{"product_id": "wavedaq-8ch", "platforms": ["macos-arm64"]}],
         }
         signature = server_private.sign(canonical_payload(document))
         document["signature"] = encode(signature)
@@ -49,5 +48,5 @@ class LicenseTests(unittest.TestCase):
             verify_device_binding({"device_id": "dev_test", "device_public_key": identity["public_key"]}, identity)
 
     def test_offline_window_does_not_force_online_refresh(self) -> None:
-        document = {"issued_at": "2020-01-01T00:00:00Z", "expires_at": None, "offline_grace_days": 30}
+        document = {"issued_at": "2020-01-01T00:00:00Z", "expires_at": None}
         verify_expiry(document)

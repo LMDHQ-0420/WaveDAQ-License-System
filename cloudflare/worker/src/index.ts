@@ -5,11 +5,10 @@ import type { GithubRelease, ResolvedRelease } from "./releases";
 import type { Env, LicenseDocument } from "./types";
 
 interface ActivateRequest { activation_code: string; device_id: string; device_public_key: string; fingerprint?: string; }
-interface CreateLicenseRequest { license_id?: string; name: string; activation_code: string; product_ids?: string[]; product_id?: string; term?: string; expires_at?: string | null; offline_grace_days?: number; }
+interface CreateLicenseRequest { license_id?: string; name: string; activation_code: string; product_ids?: string[]; product_id?: string; term?: string; expires_at?: string | null; }
 interface CreateProductRequest { product_id: string; name: string; github_repository_url: string; description?: string; }
 interface UpdateLicenseRequest { term: string; expires_at?: string | null; }
 interface UpdateProductRequest { github_repository_url: string; description?: string; }
-interface CreateReleaseRequest { id: string; product_id: string; version: string; platform: string; asset_url: string; sha256: string; file_name: string; launch_path: string; signature?: string | null; }
 interface DeviceAuth { licenseId: string; deviceId: string; publicKey: string; }
 
 interface AdminLoginRequest { password: string; }
@@ -20,10 +19,6 @@ function isExpired(value: string | null): boolean {
   const timestamp = Date.parse(value);
   return !Number.isFinite(timestamp) || timestamp <= Date.now();
 }
-function versionAllowed(version: string, ranges: string[]): boolean {
-  return ranges.some((range) => range === "*" || range === version || (range.endsWith(".*") && version.startsWith(range.slice(0, -1))));
-}
-const PLATFORMS = new Set(["windows-x64", "macos-arm64", "macos-x64"]);
 async function fetchLatestGithubRelease(env: Env, repository: string): Promise<GithubRelease> {
   if (!env.GITHUB_TOKEN) throw new Error("服务端未配置 GitHub Token");
   const response = await fetch(`https://api.github.com/repos/${repository}/releases/latest`, { headers: { accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", authorization: `Bearer ${env.GITHUB_TOKEN}`, "user-agent": "WaveDAQ-License-Worker" } });
@@ -43,12 +38,12 @@ function parseGithubRepository(value: string): string | null {
 
 async function buildLicense(env: Env, licenseId: string, deviceId: string, publicKey: string, allowUnused = false): Promise<LicenseDocument> {
   const statuses = allowUnused ? "('active', 'unused')" : "('active')";
-  const license = await env.DB.prepare(`SELECT id, expires_at, offline_grace_days FROM licenses WHERE id = ? AND is_frozen = 0 AND status IN ${statuses}`).bind(licenseId).first<{ id: string; expires_at: string | null; offline_grace_days: number }>();
+  const license = await env.DB.prepare(`SELECT id, expires_at FROM licenses WHERE id = ? AND is_frozen = 0 AND status IN ${statuses}`).bind(licenseId).first<{ id: string; expires_at: string | null }>();
   if (!license || isExpired(license.expires_at)) throw new Error("授权不存在、已失效或已过期");
-  const rows = await env.DB.prepare("SELECT product_id, version_ranges_json, platforms_json, features_json FROM license_products WHERE license_id = ?").bind(licenseId).all<{ product_id: string; version_ranges_json: string; platforms_json: string; features_json: string }>();
-  const products = rows.results.map((row) => ({ product_id: row.product_id, version_ranges: JSON.parse(row.version_ranges_json), platforms: JSON.parse(row.platforms_json), features: JSON.parse(row.features_json) }));
+  const rows = await env.DB.prepare("SELECT product_id, platforms_json, features_json FROM license_products WHERE license_id = ?").bind(licenseId).all<{ product_id: string; platforms_json: string; features_json: string }>();
+  const products = rows.results.map((row) => ({ product_id: row.product_id, platforms: JSON.parse(row.platforms_json), features: JSON.parse(row.features_json) }));
   if (!env.LICENSE_SIGNING_PRIVATE_KEY) throw new Error("服务端未配置签名私钥");
-  const unsigned: Omit<LicenseDocument, "signature"> = { schema_version: "1", license_id: license.id, device_id: deviceId, device_public_key: publicKey, issued_at: new Date().toISOString(), expires_at: license.expires_at, offline_grace_days: license.offline_grace_days, products };
+  const unsigned: Omit<LicenseDocument, "signature"> = { schema_version: "1", license_id: license.id, device_id: deviceId, device_public_key: publicKey, issued_at: new Date().toISOString(), expires_at: license.expires_at, products };
   return { ...unsigned, signature: await signLicense(unsigned, env.LICENSE_SIGNING_PRIVATE_KEY) };
 }
 
@@ -107,7 +102,7 @@ async function activate(request: Request, env: Env): Promise<Response> {
 
 async function releases(request: Request, env: Env): Promise<Response> {
   const auth = await authenticateDevice(request, env); if (auth instanceof Response) return auth;
-  const grants = await env.DB.prepare("SELECT product_id, version_ranges_json, platforms_json FROM license_products WHERE license_id = ?").bind(auth.licenseId).all<{ product_id: string; version_ranges_json: string; platforms_json: string }>();
+  const grants = await env.DB.prepare("SELECT product_id, platforms_json FROM license_products WHERE license_id = ?").bind(auth.licenseId).all<{ product_id: string; platforms_json: string }>();
   const products = await env.DB.prepare("SELECT p.id, p.name, p.description, p.github_repository FROM products p JOIN license_products lp ON lp.product_id = p.id WHERE lp.license_id = ? AND p.status = 'active' AND p.is_frozen = 0").bind(auth.licenseId).all<{ id: string; name: string; description: string; github_repository: string }>();
   const platforms = ["windows-x64", "macos-arm64", "macos-x64"];
   const latestByProduct = new Map<string, GithubRelease>();
@@ -116,7 +111,7 @@ async function releases(request: Request, env: Env): Promise<Response> {
     const grant = grants.results.find((item) => item.product_id === product.id && JSON.parse(item.platforms_json).includes(platform));
     if (!grant) return null;
     const release = resolveGithubRelease(product.github_repository, product.id, latestByProduct.get(product.id)!, platform);
-    if (!release || !versionAllowed(release.version, JSON.parse(grant.version_ranges_json))) return null;
+    if (!release) return null;
     return { ...release, download_url: `/api/download/${encodeURIComponent(release.id)}?license_id=${encodeURIComponent(auth.licenseId)}` };
   })).filter((release): release is ResolvedRelease & { download_url: string } => release !== null);
   if (allowed.length) {
@@ -134,8 +129,8 @@ async function download(request: Request, env: Env, releaseId: string): Promise<
   const auth = await authenticateDevice(request, env); if (auth instanceof Response) return auth;
   const release = await env.DB.prepare("SELECT r.product_id, r.version, r.platform, r.asset_url, p.github_repository FROM releases r JOIN products p ON p.id = r.product_id WHERE r.id = ? AND r.status = 'active' AND p.status = 'active' AND p.is_frozen = 0").bind(releaseId).first<{ product_id: string; version: string; platform: string; asset_url: string; github_repository: string }>();
   if (!release) return error("版本不存在或目录已更新，请重新在线检查更新", 404);
-  const grant = await env.DB.prepare("SELECT version_ranges_json, platforms_json FROM license_products WHERE license_id = ? AND product_id = ?").bind(auth.licenseId, release.product_id).first<{ version_ranges_json: string; platforms_json: string }>();
-  if (!grant || !JSON.parse(grant.platforms_json).includes(release.platform) || !versionAllowed(release.version, JSON.parse(grant.version_ranges_json))) return error("无权下载该版本", 403);
+  const grant = await env.DB.prepare("SELECT platforms_json FROM license_products WHERE license_id = ? AND product_id = ?").bind(auth.licenseId, release.product_id).first<{ platforms_json: string }>();
+  if (!grant || !JSON.parse(grant.platforms_json).includes(release.platform)) return error("无权下载该产品", 403);
   if (!trustedGithubAsset(release.asset_url, release.github_repository)) return error("版本下载地址不在允许的 GitHub 仓库范围内", 500);
   if (!env.GITHUB_TOKEN) return error("服务端未配置 GitHub Token", 500);
   let upstream = await fetch(release.asset_url, { headers: { accept: "application/octet-stream", authorization: `Bearer ${env.GITHUB_TOKEN}`, "user-agent": "WaveDAQ-License-Worker" }, redirect: "manual" });
@@ -256,7 +251,7 @@ async function admin(request: Request, env: Env, path: string): Promise<Response
     if (term !== "永久授权" && term !== "自定义") return error("授权期限只能是永久授权或自定义");
     if (term === "永久授权" && expiresAt) return error("永久授权不能设置过期时间");
     if (term === "自定义" && !expiresAt) return error("自定义授权必须设置过期时间");
-    const statements = [env.DB.prepare("INSERT INTO licenses (id, name, code_hash, code_ciphertext, expires_at, term, offline_grace_days) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(licenseId, name, hash, encryptedCode, expiresAt, term, input.offline_grace_days ?? 0), ...productIds.map((productId) => env.DB.prepare("INSERT INTO license_products (license_id, product_id, version_ranges_json, platforms_json, features_json) VALUES (?, ?, ?, ?, ?)").bind(licenseId, productId, JSON.stringify(["*"]), JSON.stringify(["windows-x64", "macos-arm64", "macos-x64"]), JSON.stringify([])))];
+    const statements = [env.DB.prepare("INSERT INTO licenses (id, name, code_hash, code_ciphertext, expires_at, term) VALUES (?, ?, ?, ?, ?, ?)").bind(licenseId, name, hash, encryptedCode, expiresAt, term), ...productIds.map((productId) => env.DB.prepare("INSERT INTO license_products (license_id, product_id, platforms_json, features_json) VALUES (?, ?, ?, ?)").bind(licenseId, productId, JSON.stringify(["windows-x64", "macos-arm64", "macos-x64"]), JSON.stringify([])))];
     try {
       await env.DB.batch(statements);
     } catch {
@@ -286,10 +281,6 @@ async function admin(request: Request, env: Env, path: string): Promise<Response
     const result = await env.DB.prepare("UPDATE licenses SET term = ?, expires_at = ? WHERE id = ? AND status != 'revoked'").bind(term, expiresAt, licenseId).run();
     if (!result.meta.changes) return error("授权不存在或已撤销", 404);
     return json({ license_id: licenseId });
-  }
-  if (request.method === "POST" && path === "/releases") {
-    const input = await body<CreateReleaseRequest>(request); if (!input.id || !input.product_id || !/^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$/.test(input.version) || !PLATFORMS.has(input.platform) || !trustedGithubAsset(input.asset_url, env.GITHUB_REPOSITORY) || !/^[a-fA-F0-9]{64}$/.test(input.sha256) || !/^[^/\\]{1,180}$/.test(input.file_name) || !input.launch_path || input.launch_path.length > 500) return error("版本字段、文件名、启动路径或 GitHub Asset API 地址无效");
-    await env.DB.prepare("INSERT INTO releases (id, product_id, version, platform, asset_url, sha256, file_name, launch_path, signature) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(input.id, input.product_id, input.version, input.platform, input.asset_url, input.sha256, input.file_name, input.launch_path, input.signature ?? null).run(); return json({ id: input.id }, 201);
   }
   const revokeLicense = path.match(/^\/licenses\/([^/]+)\/revoke$/); if (request.method === "POST" && revokeLicense) { const result = await env.DB.prepare("UPDATE licenses SET status = 'revoked', is_frozen = 0 WHERE id = ? AND status != 'revoked'").bind(revokeLicense[1]).run(); if (!result.meta.changes) return error("授权不存在或已经撤销", 404); return json({ status: "revoked", license_id: revokeLicense[1] }); }
   const productFreeze = path.match(/^\/products\/([^/]+)\/(freeze|unfreeze)$/);

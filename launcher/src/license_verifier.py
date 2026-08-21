@@ -57,11 +57,6 @@ def verify_expiry(license_document: dict[str, Any]) -> None:
         if datetime.now(timezone.utc) >= expiry:
             raise ValueError("授权已过期")
 
-    # offline_grace_days is retained for schema compatibility, but it is not an
-    # online heartbeat. Once activated, the signed license is valid offline
-    # until expires_at (or indefinitely when expires_at is null).
-
-
 def verify_license(license_document: dict[str, Any], identity: dict[str, str], server_public_key: str) -> None:
     verify_signature(license_document, server_public_key)
     verify_device_binding(license_document, identity)
@@ -75,13 +70,3 @@ def verify_license(license_document: dict[str, Any], identity: dict[str, str], s
     if now + 300 < last_timestamp:
         raise ValueError("检测到系统时间回拨，无法验证离线授权")
     keyring.set_password(CLOCK_SERVICE, identity["device_id"], str(max(now, last_timestamp)))
-
-
-def allows(license_document: dict[str, Any], product_id: str, version: str, platform: str) -> bool:
-    for product in license_document.get("products", []):
-        if product.get("product_id") != product_id or platform not in product.get("platforms", []):
-            continue
-        for version_range in product.get("version_ranges", []):
-            if version_range == "*" or version_range == version or (version_range.endswith(".*") and version.startswith(version_range[:-1])):
-                return True
-    return False
