@@ -19,15 +19,28 @@ jobs:
           python-version: '3.11'
       - name: Install dependencies
         run: pip install -r launcher/requirements.txt pyinstaller
+      - name: Generate application icons
+        run: python launcher/tools/generate_icons.py
       - name: Build Launcher
         working-directory: launcher
         run: pyinstaller Launcher.spec
-      - name: Package macOS Launcher
-        run: ditto -c -k --sequesterRsrc --keepParent "launcher/dist/WaveDAQ-Launcher.app" "WaveDAQ-Launcher-macos-arm64-${GITHUB_REF_NAME}.zip"
+      - name: Create macOS DMG
+        run: |
+          brew install create-dmg
+          create-dmg \
+            --volname "WaveDAQ Launcher" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "WaveDAQ-Launcher.app" 175 190 \
+            --hide-extension "WaveDAQ-Launcher.app" \
+            --app-drop-link 425 190 \
+            "WaveDAQ-Launcher-macos-arm64-${GITHUB_REF_NAME}.dmg" \
+            "launcher/dist/WaveDAQ-Launcher.app"
       - uses: actions/upload-artifact@v4
         with:
           name: launcher-macos-arm64
-          path: WaveDAQ-Launcher-macos-arm64-${{ github.ref_name }}.zip
+          path: WaveDAQ-Launcher-macos-arm64-${{ github.ref_name }}.dmg
           if-no-files-found: error
 
   build-mac-x64:
@@ -39,15 +52,28 @@ jobs:
           python-version: '3.11'
       - name: Install dependencies
         run: pip install -r launcher/requirements.txt pyinstaller
+      - name: Generate application icons
+        run: python launcher/tools/generate_icons.py
       - name: Build Launcher
         working-directory: launcher
         run: pyinstaller Launcher.spec
-      - name: Package macOS Launcher
-        run: ditto -c -k --sequesterRsrc --keepParent "launcher/dist/WaveDAQ-Launcher.app" "WaveDAQ-Launcher-macos-x64-${GITHUB_REF_NAME}.zip"
+      - name: Create macOS DMG
+        run: |
+          brew install create-dmg
+          create-dmg \
+            --volname "WaveDAQ Launcher" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "WaveDAQ-Launcher.app" 175 190 \
+            --hide-extension "WaveDAQ-Launcher.app" \
+            --app-drop-link 425 190 \
+            "WaveDAQ-Launcher-macos-x64-${GITHUB_REF_NAME}.dmg" \
+            "launcher/dist/WaveDAQ-Launcher.app"
       - uses: actions/upload-artifact@v4
         with:
           name: launcher-macos-x64
-          path: WaveDAQ-Launcher-macos-x64-${{ github.ref_name }}.zip
+          path: WaveDAQ-Launcher-macos-x64-${{ github.ref_name }}.dmg
           if-no-files-found: error
 
   build-windows:
@@ -59,16 +85,21 @@ jobs:
           python-version: '3.11'
       - name: Install dependencies
         run: pip install -r launcher/requirements.txt pyinstaller
+      - name: Generate application icons
+        run: python launcher/tools/generate_icons.py
       - name: Build Launcher
         working-directory: launcher
         run: pyinstaller Launcher.spec
-      - name: Package Windows Launcher
+      - name: Install Inno Setup
         shell: pwsh
-        run: Compress-Archive -Path launcher/dist/WaveDAQ-Launcher -DestinationPath "WaveDAQ-Launcher-windows-x64-${{ github.ref_name }}.zip"
+        run: choco install innosetup --no-progress -y
+      - name: Build Windows installer
+        shell: pwsh
+        run: iscc launcher/installer/WaveDAQ-Launcher.iss /DReleaseTag="${{ github.ref_name }}"
       - uses: actions/upload-artifact@v4
         with:
           name: launcher-windows-x64
-          path: WaveDAQ-Launcher-windows-x64-${{ github.ref_name }}.zip
+          path: WaveDAQ-Launcher-windows-x64-${{ github.ref_name }}-setup.exe
           if-no-files-found: error
 
   publish-release:
