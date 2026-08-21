@@ -20,7 +20,6 @@ export interface LicenseDocument {
   issued_at: string;
   expires_at: string | null;
   products: ProductPermission[];
-  metadata?: Record<string, string>;
   signature: string;
 }
 
