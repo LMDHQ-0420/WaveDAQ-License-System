@@ -17,6 +17,24 @@ export async function sha256(value: string): Promise<string> {
   return base64urlEncode(new Uint8Array(digest));
 }
 
+async function activationCodeKey(secret: string): Promise<CryptoKey> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`wavedaq-activation-code-v1\0${secret}`));
+  return crypto.subtle.importKey("raw", digest, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+}
+
+export async function encryptActivationCode(value: string, secret: string): Promise<string> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await activationCodeKey(secret), new TextEncoder().encode(value)));
+  return `v1.${base64urlEncode(iv)}.${base64urlEncode(ciphertext)}`;
+}
+
+export async function decryptActivationCode(value: string, secret: string): Promise<string> {
+  const parts = value.split(".");
+  if (parts.length !== 3 || parts[0] !== "v1") throw new Error("激活码密文格式无效");
+  const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv: base64urlDecode(parts[1]) }, await activationCodeKey(secret), base64urlDecode(parts[2]));
+  return new TextDecoder().decode(plaintext);
+}
+
 function sortValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortValue);
   if (value && typeof value === "object") {

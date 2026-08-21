@@ -7,9 +7,10 @@ header { display: flex; justify-content: space-between; align-items: end; gap: 2
 h1, h2 { margin: 0; } h1 { font-size: 36px; letter-spacing: -.04em; } h2 { font-size: 18px; }
 .status { color: #8d9bb0; font-size: 13px; }
 .card { background: #121b29; border: 1px solid #243148; border-radius: 16px; padding: 22px; margin-top: 18px; box-shadow: 0 12px 36px #05080d55; }
-.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; } .grid .card { display: flex; flex-direction: column; gap: 10px; }
+.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; } .grid .card { display: flex; flex-direction: column; gap: 10px; } .form-card { min-width: 0; } .checks { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; } .check { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border: 1px solid #30415e; border-radius: 8px; } .check input { width: auto; margin: 0; }
+.single-form { max-width: 640px; display: flex; flex-direction: column; gap: 10px; } .form-hint { color: #8d9bb0; margin: 0 0 6px; }
 .inline { display: flex; gap: 8px; align-items: end; } .inline input { flex: 1; } button.small { padding: 11px 12px; }
-.auth { display: flex; align-items: end; gap: 16px; } label { color: #aebbd0; font-size: 13px; flex: 1; } input { display: block; width: 100%; margin-top: 8px; padding: 12px 14px; color: #e8eef7; background: #0b111b; border: 1px solid #30415e; border-radius: 9px; }
+.login-page { max-width: 560px; padding-top: 15vh; } .login-card { padding: 32px; } .login-card form { display: flex; gap: 12px; } .login-card form input { margin-top: 0; } .login-hint, .error { color: #8d9bb0; margin: 10px 0 18px; } .error { color: #ffaaa7; } .header-actions, .toolbar { display: flex; align-items: center; gap: 14px; } .toolbar { justify-content: space-between; padding: 14px 18px; margin-top: 18px; color: #aebbd0; background: #121b29; border: 1px solid #243148; border-radius: 12px; } .secondary { color: #aebbd0; background: transparent; border: 1px solid #30415e; } label { color: #aebbd0; font-size: 13px; flex: 1; } input { display: block; width: 100%; margin-top: 8px; padding: 12px 14px; color: #e8eef7; background: #0b111b; border: 1px solid #30415e; border-radius: 9px; }
 select { width: 100%; padding: 12px 14px; color: #e8eef7; background: #0b111b; border: 1px solid #30415e; border-radius: 9px; }
 button { border: 0; border-radius: 9px; padding: 12px 18px; color: white; background: #356dff; cursor: pointer; font-weight: 600; } button:hover { background: #4d7fff; }
 .danger { padding: 6px 10px; background: #7f2933; } .danger:hover { background: #a53845; }
@@ -17,5 +18,16 @@ button { border: 0; border-radius: 9px; padding: 12px 18px; color: white; backgr
 table { width: 100%; border-collapse: collapse; font-size: 14px; } th, td { padding: 13px 10px; text-align: left; border-bottom: 1px solid #243148; } th { color: #8d9bb0; font-weight: 500; }
 .badge { display: inline-block; padding: 4px 8px; border-radius: 999px; font-size: 12px; background: #26344b; } .badge.active { color: #9bf0c0; background: #143b2a; } .badge.revoked { color: #ffaaa7; background: #4b2025; }
 .empty { color: #8d9bb0; }
+.credit { margin: 28px 0 0; color: #69778b; font-size: 12px; text-align: right; }
+textarea { display: block; width: 100%; min-height: 110px; margin-top: 8px; padding: 12px 14px; resize: vertical; color: #e8eef7; background: #0b111b; border: 1px solid #30415e; border-radius: 9px; font: inherit; }
+.modal-backdrop { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 24px; background: #05080dcc; }
+.modal { width: min(520px, 100%); margin: 0; padding: 26px; box-shadow: 0 24px 80px #0009; }
+.modal-title { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+.modal-title h2 { font-size: 22px; }
+.modal label { display: block; margin-top: 16px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+.icon-button { padding: 4px 10px; color: #aebbd0; background: transparent; font-size: 24px; line-height: 1; }
+.icon-button:hover { color: #fff; background: #26344b; }
+.code-display { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 16px; letter-spacing: .03em; }
 @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
 @media (max-width: 700px) { header, .auth { align-items: stretch; flex-direction: column; } table { display: block; overflow-x: auto; white-space: nowrap; } }

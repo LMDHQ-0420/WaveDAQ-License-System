@@ -1,0 +1,88 @@
+name: Build Launcher and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-mac-arm64:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install -r launcher/requirements.txt pyinstaller
+      - name: Build Launcher
+        working-directory: launcher
+        run: pyinstaller Launcher.spec
+      - name: Package macOS Launcher
+        run: ditto -c -k --sequesterRsrc --keepParent "launcher/dist/WaveDAQ-Launcher.app" "WaveDAQ-Launcher-macos-arm64-${GITHUB_REF_NAME}.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launcher-macos-arm64
+          path: WaveDAQ-Launcher-macos-arm64-${{ github.ref_name }}.zip
+          if-no-files-found: error
+
+  build-mac-x64:
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install -r launcher/requirements.txt pyinstaller
+      - name: Build Launcher
+        working-directory: launcher
+        run: pyinstaller Launcher.spec
+      - name: Package macOS Launcher
+        run: ditto -c -k --sequesterRsrc --keepParent "launcher/dist/WaveDAQ-Launcher.app" "WaveDAQ-Launcher-macos-x64-${GITHUB_REF_NAME}.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launcher-macos-x64
+          path: WaveDAQ-Launcher-macos-x64-${{ github.ref_name }}.zip
+          if-no-files-found: error
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install -r launcher/requirements.txt pyinstaller
+      - name: Build Launcher
+        working-directory: launcher
+        run: pyinstaller Launcher.spec
+      - name: Package Windows Launcher
+        shell: pwsh
+        run: Compress-Archive -Path launcher/dist/WaveDAQ-Launcher -DestinationPath "WaveDAQ-Launcher-windows-x64-${{ github.ref_name }}.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launcher-windows-x64
+          path: WaveDAQ-Launcher-windows-x64-${{ github.ref_name }}.zip
+          if-no-files-found: error
+
+  publish-release:
+    needs: [build-mac-arm64, build-mac-x64, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: WaveDAQ Launcher ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true
+          files: release-assets/*

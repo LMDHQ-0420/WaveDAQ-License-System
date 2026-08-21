@@ -57,12 +57,9 @@ def verify_expiry(license_document: dict[str, Any]) -> None:
         if datetime.now(timezone.utc) >= expiry:
             raise ValueError("授权已过期")
 
-    grace_days = int(license_document.get("offline_grace_days", 0))
-    issued_at = license_document.get("issued_at")
-    if grace_days > 0 and issued_at:
-        issued = datetime.fromisoformat(str(issued_at).replace("Z", "+00:00"))
-        if (datetime.now(timezone.utc) - issued).total_seconds() > grace_days * 86400:
-            raise ValueError("离线授权宽限期已结束，请联网刷新授权")
+    # offline_grace_days is retained for schema compatibility, but it is not an
+    # online heartbeat. Once activated, the signed license is valid offline
+    # until expires_at (or indefinitely when expires_at is null).
 
 
 def verify_license(license_document: dict[str, Any], identity: dict[str, str], server_public_key: str) -> None:
@@ -71,9 +68,13 @@ def verify_license(license_document: dict[str, Any], identity: dict[str, str], s
     verify_expiry(license_document)
     now = time.time()
     last_value = keyring.get_password(CLOCK_SERVICE, identity["device_id"])
-    if last_value and now + 300 < float(last_value):
+    try:
+        last_timestamp = float(last_value) if last_value else 0.0
+    except (TypeError, ValueError) as exc:
+        raise ValueError("系统安全存储中的授权时钟数据损坏，请重新激活") from exc
+    if now + 300 < last_timestamp:
         raise ValueError("检测到系统时间回拨，无法验证离线授权")
-    keyring.set_password(CLOCK_SERVICE, identity["device_id"], str(max(now, float(last_value or 0))))
+    keyring.set_password(CLOCK_SERVICE, identity["device_id"], str(max(now, last_timestamp)))
 
 
 def allows(license_document: dict[str, Any], product_id: str, version: str, platform: str) -> bool:

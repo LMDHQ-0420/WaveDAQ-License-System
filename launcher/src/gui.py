@@ -1,23 +1,32 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from pathlib import Path
 from typing import Any, Callable
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from src.api_client import LicenseApi
+from src.api_client import LicenseApi, LicenseApiError
 from src.config import API_URL, SERVER_PUBLIC_KEY
 from src.device_identity import device_fingerprint, load_or_create
 from src.license_verifier import verify_license
-from src.local_storage import data_dir, load_catalogs, load_installations, load_licenses, save_catalog, save_installation, save_license, set_active_license
+from src.local_storage import data_dir, load_catalogs, load_installations, load_licenses, mark_license_revoked, save_catalog, save_installation, save_license, set_active_license
 from src.software_installer import launch, open_installer
 
 
 def current_platform() -> str:
     import platform
     if platform.system() == "Darwin":
-        return "macos-arm64" if "arm" in platform.machine().lower() else "macos-x64"
+        machine = platform.machine().lower()
+        # Under Rosetta, platform.machine() can report x86_64 even on Apple
+        # Silicon. Ask macOS directly so the matching Release is correct.
+        translated = False
+        try:
+            translated = subprocess.check_output(["sysctl", "-in", "sysctl.proc_translated"], text=True, timeout=2).strip() == "1"
+        except (OSError, subprocess.SubprocessError):
+            pass
+        return "macos-arm64" if "arm" in machine or translated else "macos-x64"
     if platform.system() == "Windows":
         return "windows-x64"
     return "linux-x64"
@@ -41,6 +50,7 @@ class TaskThread(QtCore.QThread):
 
 class ActivationPage(QtWidgets.QWidget):
     activated = QtCore.Signal()
+    activation_warning = QtCore.Signal(str)
     cancelled = QtCore.Signal()
 
     def __init__(self) -> None:
@@ -120,21 +130,27 @@ class ActivationPage(QtWidgets.QWidget):
             document = response["license"]
             verify_license(document, identity, SERVER_PUBLIC_KEY)
             save_license(document)
-            catalog = api.releases(document["license_id"], identity)
-            save_catalog(document["license_id"], catalog)
-            return document
+            warning = ""
+            try:
+                catalog = api.releases(document["license_id"], identity)
+                save_catalog(document["license_id"], catalog)
+            except Exception as exc:
+                warning = f"授权已激活，但暂时无法读取安装包：{exc}。请稍后点击“在线检查更新”。"
+            return {"license": document, "warning": warning}
 
         self.thread = TaskThread(task, self)
         self.thread.succeeded.connect(self._activation_done)
         self.thread.failed.connect(self._activation_failed)
         self.thread.start()
 
-    def _activation_done(self, _: object) -> None:
+    def _activation_done(self, result: object) -> None:
         self.button.setEnabled(True)
         self.button.setText("验证并继续")
         self.code.clear()
         self._set_status("")
         self.activated.emit()
+        if isinstance(result, dict) and result.get("warning"):
+            self.activation_warning.emit(str(result["warning"]))
 
     def _activation_failed(self, message: str) -> None:
         self.button.setEnabled(True)
@@ -156,7 +172,7 @@ class LibraryPage(QtWidgets.QWidget):
         title_font.setPointSize(title_font.pointSize() + 3)
         title_font.setBold(True)
         title.setFont(title_font)
-        self.refresh_button = QtWidgets.QPushButton("刷新")
+        self.refresh_button = QtWidgets.QPushButton("在线检查更新")
         self.refresh_button.clicked.connect(self.refresh_online)
         add = QtWidgets.QPushButton("新增密钥")
         add.clicked.connect(self.add_key.emit)
@@ -239,6 +255,16 @@ class LibraryPage(QtWidgets.QWidget):
                 else:
                     item = {**product, "license_id": license_id, "action": "unavailable", "action_label": "暂无适用版本", "detail": current_platform()}
                 items.append(item)
+        # A local installation must remain launchable even if the cached
+        # catalog is missing or was never refreshed. The signed license and
+        # the installation record are sufficient for an offline launch.
+        known_installations = {(item.get("license_id"), item.get("id"), item["installation"].get("platform")) for item in items if item.get("installation")}
+        for installation in installations:
+            key = (installation.get("license_id"), installation.get("product_id"), installation.get("platform"))
+            target = Path(os.path.expandvars(str(installation.get("launch_path", ""))))
+            if installation.get("license_id") not in valid_ids or key in known_installations or installation.get("platform") != current_platform() or not target.exists():
+                continue
+            items.append({"id": installation.get("product_id", "wavedaq-8ch"), "name": installation.get("name", "WaveDAQ"), "description": "本地已安装版本", "license_id": installation["license_id"], "installation": installation, "release": None, "action": "launch", "action_label": "打开", "detail": f"已安装 {installation.get('version', '')}（离线）"})
         if not items:
             self.table.setRowCount(1)
             empty = QtWidgets.QTableWidgetItem("暂无可用软件，请点击右上角“新增密钥”。")
@@ -261,28 +287,48 @@ class LibraryPage(QtWidgets.QWidget):
 
     def refresh_online(self) -> None:
         self.refresh_button.setEnabled(False)
-        self._set_notice("正在刷新授权和软件列表…")
+        self._set_notice("正在在线检查授权和软件更新…")
 
         def task(_: Callable[[int], None]) -> object:
             identity = load_or_create()
             api = LicenseApi(API_URL)
-            count = 0
+            refreshed_count = 0
+            revoked_count = 0
+            warnings: list[str] = []
             for document in load_licenses():
-                refreshed = api.refresh(document["license_id"], identity)["license"]
-                verify_license(refreshed, identity, SERVER_PUBLIC_KEY)
-                save_license(refreshed, make_active=False)
-                save_catalog(refreshed["license_id"], api.releases(refreshed["license_id"], identity))
-                count += 1
-            return count
+                license_id = str(document["license_id"])
+                try:
+                    refreshed = api.refresh(license_id, identity)["license"]
+                    verify_license(refreshed, identity, SERVER_PUBLIC_KEY)
+                    save_license(refreshed, make_active=False)
+                    refreshed_count += 1
+                    try:
+                        save_catalog(license_id, api.releases(license_id, identity))
+                    except LicenseApiError as exc:
+                        warnings.append(f"{license_id[-8:]} 更新目录失败：{exc}")
+                except LicenseApiError as exc:
+                    if exc.status == 403:
+                        mark_license_revoked(license_id)
+                        revoked_count += 1
+                        continue
+                    warnings.append(f"{license_id[-8:]} 检查失败：{exc}")
+            return {"refreshed": refreshed_count, "revoked": revoked_count, "warnings": warnings}
 
         self.thread = TaskThread(task, self)
-        self.thread.succeeded.connect(lambda count: self._refresh_done(int(count)))
+        self.thread.succeeded.connect(self._refresh_done)
         self.thread.failed.connect(self._task_failed)
         self.thread.start()
 
-    def _refresh_done(self, count: int) -> None:
+    def _refresh_done(self, result: object) -> None:
         self.refresh_button.setEnabled(True)
-        self._set_notice(f"已刷新 {count} 个授权")
+        values = result if isinstance(result, dict) else {}
+        message = f"已在线检查 {values.get('refreshed', 0)} 个授权"
+        if values.get("revoked"):
+            message += f"，已停用 {values['revoked']} 个无效授权"
+        warnings = values.get("warnings") or []
+        if warnings:
+            message += "；" + "；".join(str(item) for item in warnings)
+        self._set_notice(message)
         self.reload()
 
     def handle_action(self, item: dict[str, Any]) -> None:
@@ -350,7 +396,7 @@ class MainWindow(QtWidgets.QMainWindow):
         separator.setFrameShape(QtWidgets.QFrame.Shape.HLine)
         separator.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
         central_layout.addWidget(separator)
-        credit = QtWidgets.QLabel("Coding by syx_0420@163.com")
+        credit = QtWidgets.QLabel("Coding by sunyuxiang25@mails.ucas.edu.cn")
         credit.setAlignment(QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter)
         credit_font = credit.font()
         credit_font.setPointSize(max(8, credit_font.pointSize() - 2))
@@ -362,6 +408,7 @@ class MainWindow(QtWidgets.QMainWindow):
         central_layout.addWidget(credit)
         self.setCentralWidget(central)
         self.activation.activated.connect(self.show_library)
+        self.activation.activation_warning.connect(self.library._set_notice)
         self.activation.cancelled.connect(self.show_library)
         self.library.add_key.connect(self.show_activation)
         if load_licenses(): self.show_library()

@@ -15,7 +15,9 @@ from src.release_downloader import download_verified
 
 
 class LicenseApiError(RuntimeError):
-    pass
+    def __init__(self, message: str, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 class LicenseApi:
@@ -25,7 +27,7 @@ class LicenseApi:
 
     def _request(self, method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         data = json.dumps(payload).encode() if payload is not None else None
-        request = Request(self.base_url + path, data=data, method=method, headers={"content-type": "application/json", "accept": "application/json"})
+        request = Request(self.base_url + path, data=data, method=method, headers={"content-type": "application/json", "accept": "application/json", "user-agent": "WaveDAQ-Launcher/1.0"})
         try:
             with urlopen(request, timeout=self.timeout) as response:
                 return json.loads(response.read().decode())
@@ -37,7 +39,7 @@ class LicenseApi:
                     detail = str(exc)
             else:
                 detail = str(exc)
-            raise LicenseApiError(detail) from exc
+            raise LicenseApiError(detail, exc.code if isinstance(exc, HTTPError) else None) from exc
 
     def activate(self, code: str, device_id: str, public_key: str, fingerprint: str) -> dict[str, Any]:
         return self._request("POST", "/api/activate", {"activation_code": code, "device_id": device_id, "device_public_key": public_key, "fingerprint": fingerprint})
@@ -50,12 +52,18 @@ class LicenseApi:
 
     def _signed_request(self, method: str, path: str, license_id: str, identity: dict[str, str]) -> dict[str, Any]:
         query_path = f"{path}?{urlencode({'license_id': license_id})}"
-        request = Request(self.base_url + query_path, method=method, headers={"accept": "application/json", **self._device_headers(method, path, license_id, identity)})
+        request = Request(self.base_url + query_path, method=method, headers={"accept": "application/json", "user-agent": "WaveDAQ-Launcher/1.0", **self._device_headers(method, path, license_id, identity)})
         try:
             with urlopen(request, timeout=self.timeout) as response:
                 return json.loads(response.read().decode())
         except (HTTPError, URLError) as exc:
-            raise LicenseApiError(str(exc)) from exc
+            detail = str(exc)
+            if isinstance(exc, HTTPError):
+                try:
+                    detail = json.loads(exc.read().decode()).get("error", detail)
+                except Exception:
+                    pass
+            raise LicenseApiError(detail, exc.code if isinstance(exc, HTTPError) else None) from exc
 
     def releases(self, license_id: str, identity: dict[str, str]) -> dict[str, Any]:
         return self._signed_request("GET", "/api/releases", license_id, identity)
@@ -65,5 +73,5 @@ class LicenseApi:
 
     def download(self, download_path: str, license_id: str, identity: dict[str, str], expected_sha256: str, destination: Path, progress: Callable[[int, int], None] | None = None) -> Path:
         path = download_path.split("?", 1)[0]
-        headers = self._device_headers("GET", path, license_id, identity)
+        headers = {"user-agent": "WaveDAQ-Launcher/1.0", **self._device_headers("GET", path, license_id, identity)}
         return download_verified(self.base_url + download_path, expected_sha256, destination, headers, progress)

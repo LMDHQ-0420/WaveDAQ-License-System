@@ -1,8 +1,11 @@
 export interface Env {
   DB: D1Database;
   LICENSE_SCHEMA_VERSION: string;
+  PRODUCT_ID: string;
+  GITHUB_REPOSITORY: string;
   LICENSE_SIGNING_PRIVATE_KEY?: string;
   ADMIN_TOKEN?: string;
+  ADMIN_PASSWORD_HASH?: string;
   GITHUB_TOKEN?: string;
 }
 

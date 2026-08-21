@@ -5,12 +5,18 @@ compatibility_date = "2026-08-19"
 [[d1_databases]]
 binding = "DB"
 database_name = "wavedaq-license"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "d380ef35-fae1-4653-ba50-b1ab707ccf2a"
 migrations_dir = "migrations"
 
 [vars]
 LICENSE_SCHEMA_VERSION = "1"
+PRODUCT_ID = "wavedaq-8ch"
+GITHUB_REPOSITORY = "LMDHQ-0420/WaveDAQ"
 
 [assets]
 directory = "../admin/dist"
 not_found_handling = "single-page-application"
+
+[observability]
+enabled = true
+head_sampling_rate = 1

@@ -34,6 +34,9 @@ class LicenseTests(unittest.TestCase):
         identity = {"device_id": "dev_test", "public_key": document["device_public_key"], "private_key": encode(device_private.private_bytes_raw())}
         with patch("src.license_verifier.keyring.get_password", return_value=None), patch("src.license_verifier.keyring.set_password"):
             verify_license(document, identity, encode(server_private.public_key().public_bytes_raw()))
+        with patch("src.license_verifier.keyring.get_password", return_value="broken-clock"), patch("src.license_verifier.keyring.set_password"):
+            with self.assertRaisesRegex(ValueError, "授权时钟数据损坏"):
+                verify_license(document, identity, encode(server_private.public_key().public_bytes_raw()))
 
     def test_rejects_unrelated_device_private_key(self) -> None:
         device_private = Ed25519PrivateKey.generate()
@@ -45,7 +48,6 @@ class LicenseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "私钥与设备公钥不匹配"):
             verify_device_binding({"device_id": "dev_test", "device_public_key": identity["public_key"]}, identity)
 
-    def test_rejects_expired_offline_window(self) -> None:
+    def test_offline_window_does_not_force_online_refresh(self) -> None:
         document = {"issued_at": "2020-01-01T00:00:00Z", "expires_at": None, "offline_grace_days": 30}
-        with self.assertRaisesRegex(ValueError, "离线授权宽限期已结束"):
-            verify_expiry(document)
+        verify_expiry(document)
