@@ -459,3 +459,148 @@ start_application()
 ```
 
 产品 ID 必须与管理后台登记的 ID 完全一致。产品不需要配置版本号、数据目录名或密钥环服务名。产品发布时，需要在对应 GitHub 仓库的 Release 中提供可识别的 macOS ARM、macOS Intel 或 Windows x64 安装包。
+
+### 八、为新增软件配置 GitHub 自动打包
+
+新增软件需要在自己的 GitHub 仓库中维护代码和打包工作流，不需要把整个 WaveDAQ-License-System 复制到产品仓库。先在管理后台创建产品，填写唯一的产品 ID、产品名称和 GitHub 仓库链接，再将 `license_sdk/` 复制到产品项目中，配置产品 ID 和服务器公钥，并在产品主入口调用本地授权校验。产品仓库需要创建 `.github/workflows/build.yaml`，通过 GitHub Actions 在 macOS Apple Silicon、macOS Intel 和 Windows x64 上分别构建程序，并把构建结果上传到同一个 GitHub Release。Release 标签使用 `v` 开头的版本号，例如 `v1.0.0` 或 `v1.1.0`；Launcher 会读取最新 Release，不需要在数据库中维护版本号。
+
+Worker 会按照安装包文件名识别平台，因此文件名必须包含 `macos-arm64`、`macos-x64` 或 `windows-x64`。macOS 安装包使用 DMG，Windows 产品使用可直接启动的 EXE；Launcher 下载后会将产品保存到自己的数据目录并直接启动，不需要传统安装程序。GitHub Release 上传资产后会自动提供 SHA-256 digest，Worker 会读取该 digest，Launcher 下载后再次计算 SHA-256，校验通过后才保存和启动。下面是一个可以放在新增产品仓库 `.github/workflows/build.yaml` 的完整示例，示例假设产品入口是 `app/main.py`，依赖文件是 `requirements.txt`，图标位于 `assets/app.icns` 和 `assets/app.ico`，实际项目只需按自己的目录修改这些路径和 `APP_NAME`。
+
+```yaml
+name: Build and Release Product
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  APP_NAME: MTFGesture
+
+jobs:
+  build-macos:
+    name: Build macOS ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-14
+          - arch: x64
+            runner: macos-13
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pyinstaller
+
+      - name: Build macOS application
+        run: |
+          python -m PyInstaller \
+            --noconfirm \
+            --clean \
+            --windowed \
+            --name "${APP_NAME}" \
+            --icon assets/app.icns \
+            app/main.py
+
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Create macOS DMG
+        run: |
+          create-dmg \
+            --volname "${APP_NAME}" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "${APP_NAME}.app" 175 190 \
+            --hide-extension "${APP_NAME}.app" \
+            --app-drop-link 425 190 \
+            "${APP_NAME}-macos-${{ matrix.arch }}-${GITHUB_REF_NAME}.dmg" \
+            "dist/${APP_NAME}.app"
+
+      - name: Upload macOS package
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-macos-${{ matrix.arch }}
+          path: "${{ env.APP_NAME }}-macos-${{ matrix.arch }}-${{ github.ref_name }}.dmg"
+          if-no-files-found: error
+
+  build-windows:
+    name: Build Windows x64
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pyinstaller
+
+      - name: Build Windows executable
+        shell: pwsh
+        run: |
+          python -m PyInstaller `
+            --noconfirm `
+            --clean `
+            --onefile `
+            --windowed `
+            --name "${env:APP_NAME}" `
+            --icon assets/app.ico `
+            app/main.py
+          Copy-Item "dist/${env:APP_NAME}.exe" "${env:APP_NAME}-windows-x64-${env:GITHUB_REF_NAME}.exe"
+
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-windows-x64
+          path: "${{ env.APP_NAME }}-windows-x64-${{ github.ref_name }}.exe"
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "${{ env.APP_NAME }} ${{ github.ref_name }}"
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true
+          files: release-assets/*
+```
+
+发布前需要确认三个文件名分别类似 `XX-macos-arm64-v1.0.0.dmg`、`XX-macos-x64-v1.0.0.dmg` 和 `XX-windows-x64-v1.0.0.exe`，并确认 GitHub Actions 具有 `contents: write` 权限。发布成功后，在管理后台登记该仓库的产品即可；Launcher 会自动读取最新 Release、匹配当前系统、校验 SHA-256 并下载产品。

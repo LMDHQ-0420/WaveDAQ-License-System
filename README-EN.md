@@ -273,3 +273,148 @@ SERVER_PUBLIC_KEY = "your-server-public-key"
 ```
 
 Call `require_valid_license()` from the real product entry point before starting the application. The product ID must exactly match the ID registered in the administrator console. Products do not configure a version number, data directory name, or keychain service name.
+
+### 8. Configure GitHub packaging for a new product
+
+A new product should maintain its source code and packaging workflow in its own GitHub repository; it does not need to copy the entire WaveDAQ-License-System. First create the product in the administrator console with a unique product ID, product name, and GitHub repository URL. Then copy `license_sdk/` into the product project, configure the product ID and server public key, and call the local license check from the real product entry point. The product repository should contain `.github/workflows/build.yaml`, use GitHub Actions to build separate packages on macOS Apple Silicon, macOS Intel, and Windows x64, and upload the results to a GitHub Release. Release tags use a `v`-prefixed version such as `v1.0.0` or `v1.1.0`; the Launcher reads the latest Release, so versions do not need to be stored in D1.
+
+The Worker identifies platform assets from their file names, so each name must contain `macos-arm64`, `macos-x64`, or `windows-x64`. macOS products use DMG packages, while Windows products use directly launchable EXE files; the Launcher stores downloaded products in its own data directory and starts them without a traditional installer. After assets are uploaded, GitHub provides a SHA-256 digest automatically. The Worker reads that digest, and the Launcher computes SHA-256 again after downloading before saving or launching the product. The complete example below can be placed at `.github/workflows/build.yaml` in a new product repository. It assumes that the product entry point is `app/main.py`, dependencies are listed in `requirements.txt`, and icons are located at `assets/app.icns` and `assets/app.ico`; change these paths and `APP_NAME` for the actual project.
+
+```yaml
+name: Build and Release Product
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  APP_NAME: MTFGesture
+
+jobs:
+  build-macos:
+    name: Build macOS ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-14
+          - arch: x64
+            runner: macos-13
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pyinstaller
+
+      - name: Build macOS application
+        run: |
+          python -m PyInstaller \
+            --noconfirm \
+            --clean \
+            --windowed \
+            --name "${APP_NAME}" \
+            --icon assets/app.icns \
+            app/main.py
+
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Create macOS DMG
+        run: |
+          create-dmg \
+            --volname "${APP_NAME}" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "${APP_NAME}.app" 175 190 \
+            --hide-extension "${APP_NAME}.app" \
+            --app-drop-link 425 190 \
+            "${APP_NAME}-macos-${{ matrix.arch }}-${GITHUB_REF_NAME}.dmg" \
+            "dist/${APP_NAME}.app"
+
+      - name: Upload macOS package
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-macos-${{ matrix.arch }}
+          path: "${{ env.APP_NAME }}-macos-${{ matrix.arch }}-${{ github.ref_name }}.dmg"
+          if-no-files-found: error
+
+  build-windows:
+    name: Build Windows x64
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pyinstaller
+
+      - name: Build Windows executable
+        shell: pwsh
+        run: |
+          python -m PyInstaller `
+            --noconfirm `
+            --clean `
+            --onefile `
+            --windowed `
+            --name "${env:APP_NAME}" `
+            --icon assets/app.ico `
+            app/main.py
+          Copy-Item "dist/${env:APP_NAME}.exe" "${env:APP_NAME}-windows-x64-${env:GITHUB_REF_NAME}.exe"
+
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-windows-x64
+          path: "${{ env.APP_NAME }}-windows-x64-${{ github.ref_name }}.exe"
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "${{ env.APP_NAME }} ${{ github.ref_name }}"
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true
+          files: release-assets/*
+```
+
+Before publishing, confirm that the three assets are named similar to `XX-macos-arm64-v1.0.0.dmg`, `XX-macos-x64-v1.0.0.dmg`, and `XX-windows-x64-v1.0.0.exe`, and confirm that GitHub Actions has `contents: write` permission. After the Release is published, register the repository as a product in the administrator console. The Launcher will read the latest Release, match the current platform, verify SHA-256, and download the product automatically.
