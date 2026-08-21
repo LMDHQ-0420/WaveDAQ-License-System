@@ -4,12 +4,10 @@ import base64
 import hashlib
 import uuid
 
-import keyring
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from .local_storage import data_dir, read_json, write_json
-
-KEYRING_SERVICE = "WaveDAQ License Device Key"
+from .local_crypto import decrypt_text, encrypt_text, machine_code_hash
 
 
 def _b64(value: bytes) -> str:
@@ -23,25 +21,22 @@ def _unb64(value: str) -> bytes:
 def load_or_create() -> dict[str, str]:
     path = data_dir() / "device.json"
     existing = read_json(path)
-    if existing and existing.get("device_id") and existing.get("public_key"):
-        device_id = str(existing["device_id"])
-        stored_private = keyring.get_password(KEYRING_SERVICE, device_id)
-        legacy_private = existing.get("private_key")
-        if not stored_private and legacy_private:
-            stored_private = str(legacy_private)
-            keyring.set_password(KEYRING_SERVICE, device_id, stored_private)
-            write_json(path, {"device_id": device_id, "public_key": str(existing["public_key"])})
-        if not stored_private:
-            raise RuntimeError("系统安全存储中找不到设备私钥，请由管理员解绑后重新激活")
-        return {"device_id": device_id, "private_key": stored_private, "public_key": str(existing["public_key"])}
+    if existing and existing.get("device_id") and existing.get("public_key") and existing.get("private_key_encrypted"):
+        if existing.get("machine_code_hash") != machine_code_hash():
+            raise RuntimeError("设备机器码不匹配，无法读取本机授权")
+        try:
+            stored_private = decrypt_text(str(existing["private_key_encrypted"]))
+        except Exception as exc:
+            raise RuntimeError("本地设备密钥损坏，请重新激活") from exc
+        return {"device_id": str(existing["device_id"]), "private_key": stored_private, "public_key": str(existing["public_key"]), "machine_code_hash": machine_code_hash()}
 
     private = Ed25519PrivateKey.generate()
     private_raw = private.private_bytes_raw()
     public_raw = private.public_key().public_bytes_raw()
     device_id = "dev_" + uuid.uuid4().hex
     value = {"device_id": device_id, "private_key": _b64(private_raw), "public_key": _b64(public_raw)}
-    keyring.set_password(KEYRING_SERVICE, device_id, value["private_key"])
-    write_json(path, {"device_id": device_id, "public_key": value["public_key"]})
+    write_json(path, {"schema_version": 2, "device_id": device_id, "public_key": value["public_key"], "machine_code_hash": machine_code_hash(), "private_key_encrypted": encrypt_text(value["private_key"])})
+    value["machine_code_hash"] = machine_code_hash()
     return value
 
 

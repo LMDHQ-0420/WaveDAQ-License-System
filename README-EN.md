@@ -130,7 +130,7 @@ WaveDAQ-License-System/
 │   ├── src/gui.py                       # Activation, product, download, and launch UI
 │   ├── src/api_client.py                # API requests
 │   ├── src/config.py                    # Worker URL and public key
-│   ├── src/device_identity.py           # Device Ed25519 key and system keyring
+│   ├── src/device_identity.py           # Device Ed25519 key and encrypted local storage
 │   ├── src/license_verifier.py          # Launcher license verification
 │   ├── src/local_storage.py             # License, catalog, and installation records
 │   ├── src/release_downloader.py        # Download and SHA-256 verification
@@ -255,4 +255,4 @@ PRODUCT_ID = "your-product-id"
 SERVER_PUBLIC_KEY = "your-server-public-key"
 ```
 
-Call `require_valid_license()` from the real product entry point before starting the application. The product ID must exactly match the ID registered in the administrator console. Products do not configure a version number, data directory name, or keyring service name.
+Call `require_valid_license()` from the real product entry point before starting the application. The product ID must exactly match the ID registered in the administrator console. Products do not configure a version number, data directory name, or keychain service name.

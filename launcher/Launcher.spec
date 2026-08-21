@@ -2,7 +2,7 @@
 import sys
 from PyInstaller.utils.hooks import collect_submodules
 
-hiddenimports = collect_submodules("cryptography") + collect_submodules("keyring.backends") + ["PySide6.QtSvg"]
+hiddenimports = collect_submodules("cryptography") + ["PySide6.QtSvg"]
 
 a = Analysis(
     ["src/main.py"],

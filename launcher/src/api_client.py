@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import ssl
 import time
 import uuid
 from pathlib import Path
@@ -9,6 +10,11 @@ from urllib.parse import urlencode
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from typing import Any
+
+try:
+    import certifi
+except ImportError:  # Development environments may not have optional CA data installed yet.
+    certifi = None
 
 from src.device_identity import sign
 from src.release_downloader import download_verified
@@ -24,12 +30,13 @@ class LicenseApi:
     def __init__(self, base_url: str, timeout: float = 20.0) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        self.ssl_context = ssl.create_default_context(cafile=certifi.where()) if certifi else ssl.create_default_context()
 
     def _request(self, method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         data = json.dumps(payload).encode() if payload is not None else None
         request = Request(self.base_url + path, data=data, method=method, headers={"content-type": "application/json", "accept": "application/json", "user-agent": "WaveDAQ-Launcher/1.0"})
         try:
-            with urlopen(request, timeout=self.timeout) as response:
+            with urlopen(request, timeout=self.timeout, context=self.ssl_context) as response:
                 return json.loads(response.read().decode())
         except (HTTPError, URLError) as exc:
             if isinstance(exc, HTTPError):
@@ -54,7 +61,7 @@ class LicenseApi:
         query_path = f"{path}?{urlencode({'license_id': license_id})}"
         request = Request(self.base_url + query_path, method=method, headers={"accept": "application/json", "user-agent": "WaveDAQ-Launcher/1.0", **self._device_headers(method, path, license_id, identity)})
         try:
-            with urlopen(request, timeout=self.timeout) as response:
+            with urlopen(request, timeout=self.timeout, context=self.ssl_context) as response:
                 return json.loads(response.read().decode())
         except (HTTPError, URLError) as exc:
             detail = str(exc)

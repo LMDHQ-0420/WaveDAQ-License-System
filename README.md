@@ -405,7 +405,7 @@ Linux：
 `<系统数据目录>/WaveDAQ-Launcher/downloads/<product_id>/<version>/<file_name>`。
 `installations.json` 保存已下载产品的版本、平台、安装包路径和启动路径；macOS 产品的默认启动路径由 Release 元数据提供，Windows 产品默认直接启动下载后的文件。Launcher 不把产品安装到自己的 Python 或 Conda 环境中。
 
-设备私钥和防时间回拨数据保存在 macOS Keychain、Windows Credential Manager 或 Linux Secret Service 中，不写入普通 JSON 文件。
+设备私钥和防时间回拨数据不访问 macOS Keychain、Windows Credential Manager 或 Linux Secret Service，而是使用本地机器码派生密钥加密后保存在应用数据目录中。
 
 ### 七、在其他软件中接入验证模块
 

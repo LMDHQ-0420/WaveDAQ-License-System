@@ -9,14 +9,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import keyring
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
 from .config import PRODUCT_ID, SERVER_PUBLIC_KEY
+from .local_crypto import decrypt_text, encrypt_text, machine_code_hash
 
 DATA_DIRECTORY_NAME = "WaveDAQ-Launcher"
-KEYRING_SERVICE = "WaveDAQ License Device Key"
-CLOCK_SERVICE = "WaveDAQ License Clock"
 
 
 class LicenseError(RuntimeError):
@@ -63,7 +61,11 @@ def _platform_id() -> str:
 
 def _read_json(path: Path) -> dict[str, Any]:
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        raw = path.read_text(encoding="utf-8")
+        try:
+            value = json.loads(raw)
+        except ValueError:
+            value = json.loads(decrypt_text(raw.strip()))
     except (OSError, ValueError) as exc:
         raise LicenseError("未找到有效的本机授权，请先运行 WaveDAQ-Launcher 激活") from exc
     if not isinstance(value, dict):
@@ -88,12 +90,10 @@ def verify_device_binding(document: dict[str, Any], identity: dict[str, str]) ->
         raise LicenseError("授权文件不是本设备的授权")
     if document.get("device_public_key") != identity.get("public_key"):
         raise LicenseError("设备公钥不匹配")
-    device_id = str(identity.get("device_id", ""))
-    private_value = keyring.get_password(KEYRING_SERVICE, device_id)
-    if not private_value:
-        raise LicenseError("系统安全存储中缺少设备私钥")
+    if identity.get("machine_code_hash") != machine_code_hash():
+        raise LicenseError("设备机器码不匹配")
     try:
-        private = Ed25519PrivateKey.from_private_bytes(_b64decode(private_value))
+        private = Ed25519PrivateKey.from_private_bytes(_b64decode(decrypt_text(str(identity["private_key_encrypted"]))))
         derived_public = base64.urlsafe_b64encode(private.public_key().public_bytes_raw()).decode("ascii").rstrip("=")
         if derived_public != identity.get("public_key"):
             raise ValueError("设备私钥与公钥不匹配")
@@ -127,14 +127,24 @@ def verify_license(document: dict[str, Any], identity: dict[str, str], server_pu
     verify_device_binding(document, identity)
     verify_expiry(document)
     now = time.time()
-    last_value = keyring.get_password(CLOCK_SERVICE, identity["device_id"])
+    clock_path = data_dir() / "clock.dat"
+    last_value = None
+    if clock_path.exists():
+        try:
+            last_value = decrypt_text(clock_path.read_text(encoding="utf-8").strip())
+        except Exception as exc:
+            raise LicenseError("本地授权时钟数据损坏，请重新激活") from exc
     try:
         last_timestamp = float(last_value) if last_value else 0.0
     except (TypeError, ValueError) as exc:
-        raise LicenseError("系统安全存储中的授权时钟数据损坏，请重新激活") from exc
+        raise LicenseError("本地授权时钟数据损坏，请重新激活") from exc
     if now + 300 < last_timestamp:
         raise LicenseError("检测到系统时间回拨，无法验证离线授权")
-    keyring.set_password(CLOCK_SERVICE, identity["device_id"], str(max(now, last_timestamp)))
+    clock_path.write_text(encrypt_text(str(max(now, last_timestamp))), encoding="utf-8")
+    try:
+        clock_path.chmod(0o600)
+    except OSError:
+        pass
     if not allows(document, PRODUCT_ID, _platform_id()):
         raise LicenseError("当前设备未获得此产品或平台的授权")
 

@@ -426,6 +426,13 @@ class MainWindow(QtWidgets.QMainWindow):
 def run_gui() -> int:
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     app.setApplicationName("WaveDAQ Software Center")
+    try:
+        # Identity creation is local only. If an identity already exists, this
+        # also verifies the machine-code binding before showing any page.
+        load_or_create()
+    except Exception as exc:
+        QtWidgets.QMessageBox.critical(None, "无法启动", str(exc))
+        return 1
     window = MainWindow()
     window.show()
     return app.exec()

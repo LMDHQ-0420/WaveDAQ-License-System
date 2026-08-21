@@ -2,11 +2,17 @@ from __future__ import annotations
 
 import hashlib
 import os
+import ssl
 import shutil
 import tempfile
 from pathlib import Path
 from collections.abc import Callable
 from urllib.request import Request, urlopen
+
+try:
+    import certifi
+except ImportError:
+    certifi = None
 
 
 def download_verified(url: str, expected_sha256: str, destination: Path, headers: dict[str, str] | None = None, progress: Callable[[int, int], None] | None = None) -> Path:
@@ -17,7 +23,8 @@ def download_verified(url: str, expected_sha256: str, destination: Path, headers
     digest = hashlib.sha256()
     try:
         request = Request(url, headers=headers or {})
-        with urlopen(request, timeout=60) as response, temporary.open("wb") as output:
+        context = ssl.create_default_context(cafile=certifi.where()) if certifi else ssl.create_default_context()
+        with urlopen(request, timeout=60, context=context) as response, temporary.open("wb") as output:
             total = int(response.headers.get("content-length", "0") or 0)
             received = 0
             while chunk := response.read(1024 * 1024):

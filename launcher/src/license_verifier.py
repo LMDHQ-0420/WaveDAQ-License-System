@@ -7,9 +7,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-import keyring
-
-CLOCK_SERVICE = "WaveDAQ License Clock"
+from .local_crypto import decrypt_text, encrypt_text, machine_code_hash
+from .local_storage import data_dir
 
 
 def _unb64(value: str) -> bytes:
@@ -41,12 +40,14 @@ def verify_device_binding(license_document: dict[str, Any], identity: dict[str, 
         raise ValueError("授权文件不是本设备的授权")
     if license_document.get("device_public_key") != identity["public_key"]:
         raise ValueError("设备公钥不匹配")
+    if identity.get("machine_code_hash") != machine_code_hash():
+        raise ValueError("设备机器码不匹配")
     challenge = b"wavedaq-local-license-check"
     from src.device_identity import private_key
     private = private_key(identity)
     derived_public = base64.urlsafe_b64encode(private.public_key().public_bytes_raw()).decode("ascii").rstrip("=")
     if derived_public != identity["public_key"]:
-        raise ValueError("系统安全存储中的私钥与设备公钥不匹配")
+        raise ValueError("本地设备私钥与设备公钥不匹配")
     private.public_key().verify(private.sign(challenge), challenge)
 
 
@@ -62,11 +63,21 @@ def verify_license(license_document: dict[str, Any], identity: dict[str, str], s
     verify_device_binding(license_document, identity)
     verify_expiry(license_document)
     now = time.time()
-    last_value = keyring.get_password(CLOCK_SERVICE, identity["device_id"])
+    clock_path = data_dir() / "clock.dat"
+    last_value = None
+    if clock_path.exists():
+        try:
+            last_value = decrypt_text(clock_path.read_text(encoding="utf-8").strip())
+        except Exception as exc:
+            raise ValueError("本地授权时钟数据损坏，请重新激活") from exc
     try:
         last_timestamp = float(last_value) if last_value else 0.0
     except (TypeError, ValueError) as exc:
-        raise ValueError("系统安全存储中的授权时钟数据损坏，请重新激活") from exc
+        raise ValueError("本地授权时钟数据损坏，请重新激活") from exc
     if now + 300 < last_timestamp:
         raise ValueError("检测到系统时间回拨，无法验证离线授权")
-    keyring.set_password(CLOCK_SERVICE, identity["device_id"], str(max(now, last_timestamp)))
+    clock_path.write_text(encrypt_text(str(max(now, last_timestamp))), encoding="utf-8")
+    try:
+        clock_path.chmod(0o600)
+    except OSError:
+        pass

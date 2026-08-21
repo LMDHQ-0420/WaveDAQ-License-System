@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import unittest
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from src.license_verifier import canonical_payload, verify_expiry, verify_license
+from src.local_crypto import machine_code_hash
 
 
 class LicenseTests(unittest.TestCase):
@@ -30,10 +33,11 @@ class LicenseTests(unittest.TestCase):
         }
         signature = server_private.sign(canonical_payload(document))
         document["signature"] = encode(signature)
-        identity = {"device_id": "dev_test", "public_key": document["device_public_key"], "private_key": encode(device_private.private_bytes_raw())}
-        with patch("src.license_verifier.keyring.get_password", return_value=None), patch("src.license_verifier.keyring.set_password"):
+        identity = {"device_id": "dev_test", "public_key": document["device_public_key"], "machine_code_hash": machine_code_hash(), "private_key": encode(device_private.private_bytes_raw())}
+        with tempfile.TemporaryDirectory() as directory, patch("src.license_verifier.data_dir", return_value=Path(directory)):
             verify_license(document, identity, encode(server_private.public_key().public_bytes_raw()))
-        with patch("src.license_verifier.keyring.get_password", return_value="broken-clock"), patch("src.license_verifier.keyring.set_password"):
+        with tempfile.TemporaryDirectory() as directory, patch("src.license_verifier.data_dir", return_value=Path(directory)):
+            (Path(directory) / "clock.dat").write_text("broken-clock", encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "授权时钟数据损坏"):
                 verify_license(document, identity, encode(server_private.public_key().public_bytes_raw()))
 
@@ -42,7 +46,7 @@ class LicenseTests(unittest.TestCase):
         other_private = Ed25519PrivateKey.generate()
         import base64
         encode = lambda value: base64.urlsafe_b64encode(value).decode().rstrip("=")
-        identity = {"device_id": "dev_test", "public_key": encode(device_private.public_key().public_bytes_raw()), "private_key": encode(other_private.private_bytes_raw())}
+        identity = {"device_id": "dev_test", "public_key": encode(device_private.public_key().public_bytes_raw()), "machine_code_hash": machine_code_hash(), "private_key": encode(other_private.private_bytes_raw())}
         from src.license_verifier import verify_device_binding
         with self.assertRaisesRegex(ValueError, "私钥与设备公钥不匹配"):
             verify_device_binding({"device_id": "dev_test", "device_public_key": identity["public_key"]}, identity)
