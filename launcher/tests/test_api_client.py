@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import io
 import unittest
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from unittest.mock import MagicMock, patch
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -47,6 +47,11 @@ class SignedRequestTests(unittest.TestCase):
             LicenseApi("https://example.test").refresh("lic_test", identity)
         request = opened.call_args.args[0]
         self.assertEqual(request.get_header("User-agent"), "WaveDAQ-Launcher/1.0")
+
+    def test_network_failures_use_retry_message(self) -> None:
+        with patch("src.api_client.urlopen", side_effect=URLError("[SSL: UNEXPECTED_EOF_WHILE_READING]")):
+            with self.assertRaisesRegex(LicenseApiError, "网络波动，请重试"):
+                LicenseApi("https://example.test").activate("CODE", "device", "public", "fingerprint")
 
 
 if __name__ == "__main__":

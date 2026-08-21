@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from pathlib import Path
 from typing import Any, Callable
@@ -12,7 +13,7 @@ from src.config import API_URL, SERVER_PUBLIC_KEY
 from src.device_identity import device_fingerprint, load_or_create
 from src.license_verifier import verify_license
 from src.local_storage import data_dir, load_catalogs, load_installations, load_licenses, mark_license_revoked, save_catalog, save_installation, save_license, set_active_license
-from src.software_installer import launch, open_installer
+from src.software_installer import install_product, launch
 
 
 def current_platform() -> str:
@@ -30,6 +31,16 @@ def current_platform() -> str:
     if platform.system() == "Windows":
         return "windows-x64"
     return "linux-x64"
+
+
+def version_key(value: str | None) -> tuple[tuple[int, ...], str]:
+    text = str(value or "0").strip().lower().lstrip("v")
+    numbers = tuple(int(part) for part in re.findall(r"\d+", text))
+    return numbers or (0,), text
+
+
+def is_newer_version(candidate: str | None, installed: str | None) -> bool:
+    return version_key(candidate) > version_key(installed)
 
 
 class TaskThread(QtCore.QThread):
@@ -176,6 +187,7 @@ class LibraryPage(QtWidgets.QWidget):
         self.refresh_button.clicked.connect(self.refresh_online)
         add = QtWidgets.QPushButton("新增密钥")
         add.clicked.connect(self.add_key.emit)
+        self.add_button = add
         header.addWidget(title)
         header.addStretch()
         header.addWidget(self.refresh_button)
@@ -209,6 +221,7 @@ class LibraryPage(QtWidgets.QWidget):
         footer.addStretch()
         root.addLayout(footer)
         self.thread: TaskThread | None = None
+        self.download_in_progress = False
         self.reload()
 
     def _set_notice(self, message: str) -> None:
@@ -245,11 +258,16 @@ class LibraryPage(QtWidgets.QWidget):
                 continue
             for product in catalog.get("products", []):
                 releases = [release for release in catalog.get("releases", []) if release.get("product_id") == product.get("id") and release.get("platform") == current_platform()]
-                releases.sort(key=lambda value: value.get("version", ""), reverse=True)
+                releases.sort(key=lambda value: version_key(value.get("version")), reverse=True)
                 installation = next((record for record in installations if record.get("product_id") == product.get("id") and record.get("license_id") == license_id), None)
                 installation_target = Path(os.path.expandvars(installation.get("launch_path", ""))) if installation else None
                 if installation and installation_target and installation_target.exists():
-                    item = {**product, "license_id": license_id, "installation": installation, "release": releases[0] if releases else None, "action": "launch", "action_label": "打开", "detail": f"已安装 {installation.get('version', '')}"}
+                    latest = releases[0] if releases else None
+                    update_available = bool(latest and is_newer_version(latest.get("version"), installation.get("version")))
+                    detail = f"已安装 {installation.get('version', '')}"
+                    if update_available:
+                        detail += f"，可更新至 {latest.get('version')}"
+                    item = {**product, "license_id": license_id, "installation": installation, "release": latest, "update_available": update_available, "action": "launch", "action_label": "打开", "detail": detail}
                 elif releases:
                     item = {**product, "license_id": license_id, "release": releases[0], "action": "download", "action_label": "下载并安装", "detail": f"可用版本 {releases[0].get('version')}"}
                 else:
@@ -279,10 +297,23 @@ class LibraryPage(QtWidgets.QWidget):
             self.table.setItem(row, 0, QtWidgets.QTableWidgetItem(item["name"]))
             self.table.setItem(row, 1, QtWidgets.QTableWidgetItem(item.get("description") or "WaveDAQ 数据采集软件"))
             self.table.setItem(row, 2, QtWidgets.QTableWidgetItem(item.get("detail", "")))
-            button = QtWidgets.QPushButton(item["action_label"])
-            button.setEnabled(item["action"] != "unavailable")
-            button.clicked.connect(lambda _checked=False, selected=item: self.handle_action(selected))
-            self.table.setCellWidget(row, 3, button)
+            if item["action"] == "launch" and item.get("update_available"):
+                actions = QtWidgets.QWidget()
+                action_layout = QtWidgets.QHBoxLayout(actions)
+                action_layout.setContentsMargins(0, 0, 0, 0)
+                open_button = QtWidgets.QPushButton("打开")
+                update_button = QtWidgets.QPushButton("更新")
+                open_button.clicked.connect(lambda _checked=False, selected=item: self.handle_action(selected))
+                update_item = {**item, "action": "update"}
+                update_button.clicked.connect(lambda _checked=False, selected=update_item: self.handle_action(selected))
+                action_layout.addWidget(open_button)
+                action_layout.addWidget(update_button)
+                self.table.setCellWidget(row, 3, actions)
+            else:
+                button = QtWidgets.QPushButton(item["action_label"])
+                button.setEnabled(item["action"] != "unavailable")
+                button.clicked.connect(lambda _checked=False, selected=item: self.handle_action(selected))
+                self.table.setCellWidget(row, 3, button)
             self.table.setRowHeight(row, 44)
 
     def refresh_online(self) -> None:
@@ -335,16 +366,20 @@ class LibraryPage(QtWidgets.QWidget):
         if item["action"] == "launch":
             try:
                 set_active_license(item["license_id"])
-                target = Path(os.path.expandvars(item["installation"]["launch_path"]))
-                if not target.exists():
-                    raise RuntimeError(f"找不到已安装程序：{target}")
-                launch(target)
+                self._launch_record(item["installation"])
             except Exception as exc:
                 self._set_notice(str(exc))
             return
+        if self.download_in_progress:
+            self._set_notice("已有软件正在下载，请等待完成。")
+            return
         release = item["release"]
+        if not release:
+            self._set_notice("当前没有可用的安装包，请先在线检查更新。")
+            return
         file_name = release.get("file_name") or release["id"]
-        destination = data_dir() / "downloads" / item["id"] / release["version"] / file_name
+        destination = data_dir() / "downloads" / item["id"] / release["platform"] / release["version"] / file_name
+        self._set_download_busy(True)
         self._set_notice(f"正在下载 {item['name']}… 0%")
 
         def task(report: Callable[[int], None]) -> object:
@@ -353,27 +388,55 @@ class LibraryPage(QtWidgets.QWidget):
             def progress(received: int, total: int) -> None:
                 report(int(received * 100 / total) if total else 0)
             path = api.download(release["download_url"], item["license_id"], identity, release["sha256"], destination, progress)
-            launch_path = release.get("launch_path") or "@downloaded"
-            if launch_path == "@downloaded": launch_path = str(path)
-            record = {"license_id": item["license_id"], "product_id": item["id"], "name": item["name"], "version": release["version"], "platform": release["platform"], "launch_path": launch_path, "package_path": str(path)}
+            launch_path = install_product(path, item["id"], release["platform"], release["version"])
+            record = {"license_id": item["license_id"], "product_id": item["id"], "name": item["name"], "version": release["version"], "platform": release["platform"], "launch_path": str(launch_path), "package_path": str(path), "security_notice_shown": False}
             save_installation(record)
             set_active_license(item["license_id"])
-            open_installer(path)
             return record
 
         self.thread = TaskThread(task, self)
         self.thread.progressed.connect(lambda value: self._set_notice(f"正在下载 {item['name']}… {value}%"))
-        self.thread.succeeded.connect(lambda _: self._download_done(item["name"]))
+        self.thread.succeeded.connect(self._download_done)
         self.thread.failed.connect(self._task_failed)
         self.thread.start()
 
-    def _download_done(self, name: str) -> None:
-        self._set_notice(f"{name} 下载完成，安装程序已打开。安装完成后可从这里启动。")
+    def _download_done(self, result: object) -> None:
+        self._set_download_busy(False)
+        record = result if isinstance(result, dict) else {}
+        self._set_notice(f"{record.get('name', '软件')} 已下载并保存，可以从这里启动。")
+        self._launch_record(record)
         self.reload()
 
     def _task_failed(self, message: str) -> None:
+        self._set_download_busy(False)
         self.refresh_button.setEnabled(True)
         self._set_notice(message)
+
+    def _set_download_busy(self, busy: bool) -> None:
+        self.download_in_progress = busy
+        self.refresh_button.setEnabled(not busy)
+        self.add_button.setEnabled(not busy)
+        for row in range(self.table.rowCount()):
+            widget = self.table.cellWidget(row, 3)
+            if widget:
+                widget.setEnabled(not busy)
+
+    def _launch_record(self, record: dict[str, Any]) -> None:
+        try:
+            target = Path(os.path.expandvars(str(record.get("launch_path", ""))))
+            if not target.exists():
+                raise RuntimeError(f"找不到已安装程序：{target}")
+            if not record.get("security_notice_shown"):
+                QtWidgets.QMessageBox.information(
+                    self,
+                    "首次启动提示",
+                    "首次启动软件时，系统可能显示安全确认窗口。\n请根据系统提示选择允许或继续运行。",
+                )
+                record["security_notice_shown"] = True
+                save_installation(record)
+            launch(target)
+        except Exception as exc:
+            self._set_notice(str(exc))
 
 
 class MainWindow(QtWidgets.QMainWindow):

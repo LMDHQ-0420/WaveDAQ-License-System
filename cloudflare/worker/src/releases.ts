@@ -35,6 +35,6 @@ export function resolveGithubRelease(repository: string, productId: string, rele
     asset_url: asset.url,
     sha256: asset.digest.slice("sha256:".length),
     file_name: asset.name,
-    launch_path: platform.startsWith("macos-") ? "/Applications/WaveDAQ.app" : "@downloaded"
+    launch_path: "@downloaded"
   };
 }

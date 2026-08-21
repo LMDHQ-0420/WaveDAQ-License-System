@@ -156,6 +156,7 @@ WaveDAQ-License-System/
 │   ├── __init__.py
 │   ├── config.py                        # 产品 ID 和服务器公钥
 │   ├── local_crypto.py                  # 机器码绑定的本地加密
+│   ├── license_dialog.py                 # 统一的 Qt 授权失败窗口
 │   └── verifier.py                      # 签名、设备、期限、平台校验
 ├── cloudflare/
 │   ├── package.json                     # Cloudflare 子项目脚本

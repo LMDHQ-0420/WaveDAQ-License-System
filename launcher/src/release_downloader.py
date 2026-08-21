@@ -8,6 +8,7 @@ import tempfile
 from pathlib import Path
 from collections.abc import Callable
 from urllib.request import Request, urlopen
+from urllib.error import URLError
 
 try:
     import certifi
@@ -24,15 +25,18 @@ def download_verified(url: str, expected_sha256: str, destination: Path, headers
     try:
         request = Request(url, headers=headers or {})
         context = ssl.create_default_context(cafile=certifi.where()) if certifi else ssl.create_default_context()
-        with urlopen(request, timeout=60, context=context) as response, temporary.open("wb") as output:
-            total = int(response.headers.get("content-length", "0") or 0)
-            received = 0
-            while chunk := response.read(1024 * 1024):
-                digest.update(chunk)
-                output.write(chunk)
-                received += len(chunk)
-                if progress:
-                    progress(received, total)
+        try:
+            with urlopen(request, timeout=60, context=context) as response, temporary.open("wb") as output:
+                total = int(response.headers.get("content-length", "0") or 0)
+                received = 0
+                while chunk := response.read(1024 * 1024):
+                    digest.update(chunk)
+                    output.write(chunk)
+                    received += len(chunk)
+                    if progress:
+                        progress(received, total)
+        except (URLError, TimeoutError, ssl.SSLError, ConnectionError) as exc:
+            raise RuntimeError("网络波动，请重试") from exc
         if digest.hexdigest().lower() != expected_sha256.lower():
             raise ValueError("软件包 SHA-256 校验失败")
         shutil.move(str(temporary), destination)

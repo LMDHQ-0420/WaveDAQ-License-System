@@ -26,6 +26,9 @@ class LicenseApiError(RuntimeError):
         self.status = status
 
 
+NETWORK_RETRY_MESSAGE = "网络波动，请重试"
+
+
 class LicenseApi:
     def __init__(self, base_url: str, timeout: float = 20.0) -> None:
         self.base_url = base_url.rstrip("/")
@@ -45,7 +48,7 @@ class LicenseApi:
                 except Exception:
                     detail = str(exc)
             else:
-                detail = str(exc)
+                detail = NETWORK_RETRY_MESSAGE
             raise LicenseApiError(detail, exc.code if isinstance(exc, HTTPError) else None) from exc
 
     def activate(self, code: str, device_id: str, public_key: str, fingerprint: str) -> dict[str, Any]:
@@ -64,7 +67,7 @@ class LicenseApi:
             with urlopen(request, timeout=self.timeout, context=self.ssl_context) as response:
                 return json.loads(response.read().decode())
         except (HTTPError, URLError) as exc:
-            detail = str(exc)
+            detail = NETWORK_RETRY_MESSAGE
             if isinstance(exc, HTTPError):
                 try:
                     detail = json.loads(exc.read().decode()).get("error", detail)

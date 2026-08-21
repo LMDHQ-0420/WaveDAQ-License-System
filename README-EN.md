@@ -150,6 +150,7 @@ WaveDAQ-License-System/
 │   ├── __init__.py
 │   ├── config.py                        # Product ID and server public key
 │   ├── local_crypto.py                  # Machine-bound local encryption
+│   ├── license_dialog.py                 # Shared Qt authorization dialog
 │   └── verifier.py                      # Signature, device, term, and platform checks
 ├── cloudflare/
 │   ├── package.json                     # Cloudflare project scripts
