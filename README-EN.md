@@ -18,14 +18,7 @@
 
 | Image | Software | Description |
 |---|---|---|
-| <img src="assets/WaveDAG.png" width="180" alt="WaveDAQ interface"/> | **WaveDAQ** | An 8-channel UDP real-time data acquisition and waveform display application. Authorization, installation, and launch are handled by the Launcher. |
-| <img src="logo.png" width="120" alt="WaveDAQ License System"/> | **WaveDAQ-Launcher** | The unified authorization, product installation, and launch entry point. It can support additional desktop products. |
-
-### WaveDAQ
-
-WaveDAQ is a desktop application for experimental data acquisition. It supports 8-channel UDP real-time data reception, waveform display, and data processing. It is one of the products currently supported by this verification system; the product and the licensing system are maintained separately.
-
-WaveDAQ License System is a licensing, distribution, and offline verification system for multiple desktop applications. Administrators register products and GitHub repositories. Users activate their device, install products, and launch them through one Launcher.
+| <img src="assets/WaveDAG.png" width="180" alt="WaveDAQ interface"/> | **WaveDAQ** | WaveDAQ is a desktop application for experimental data acquisition. It supports 8-channel UDP real-time data reception, waveform display, and data processing. |
 
 ## User Guide
 
