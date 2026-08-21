@@ -40,8 +40,8 @@ async function buildLicense(env: Env, licenseId: string, deviceId: string, publi
   const statuses = allowUnused ? "('active', 'unused')" : "('active')";
   const license = await env.DB.prepare(`SELECT id, expires_at FROM licenses WHERE id = ? AND is_frozen = 0 AND status IN ${statuses}`).bind(licenseId).first<{ id: string; expires_at: string | null }>();
   if (!license || isExpired(license.expires_at)) throw new Error("授权不存在、已失效或已过期");
-  const rows = await env.DB.prepare("SELECT product_id, platforms_json, features_json FROM license_products WHERE license_id = ?").bind(licenseId).all<{ product_id: string; platforms_json: string; features_json: string }>();
-  const products = rows.results.map((row) => ({ product_id: row.product_id, platforms: JSON.parse(row.platforms_json), features: JSON.parse(row.features_json) }));
+  const rows = await env.DB.prepare("SELECT product_id FROM license_products WHERE license_id = ?").bind(licenseId).all<{ product_id: string }>();
+  const products = rows.results.map((row) => ({ product_id: row.product_id, platforms: ["windows-x64", "macos-arm64", "macos-x64"] }));
   if (!env.LICENSE_SIGNING_PRIVATE_KEY) throw new Error("服务端未配置签名私钥");
   const unsigned: Omit<LicenseDocument, "signature"> = { schema_version: "1", license_id: license.id, device_id: deviceId, device_public_key: publicKey, issued_at: new Date().toISOString(), expires_at: license.expires_at, products };
   return { ...unsigned, signature: await signLicense(unsigned, env.LICENSE_SIGNING_PRIVATE_KEY) };
@@ -102,21 +102,18 @@ async function activate(request: Request, env: Env): Promise<Response> {
 
 async function releases(request: Request, env: Env): Promise<Response> {
   const auth = await authenticateDevice(request, env); if (auth instanceof Response) return auth;
-  const grants = await env.DB.prepare("SELECT product_id, platforms_json FROM license_products WHERE license_id = ?").bind(auth.licenseId).all<{ product_id: string; platforms_json: string }>();
+  const grants = await env.DB.prepare("SELECT product_id FROM license_products WHERE license_id = ?").bind(auth.licenseId).all<{ product_id: string }>();
   const products = await env.DB.prepare("SELECT p.id, p.name, p.description, p.github_repository FROM products p JOIN license_products lp ON lp.product_id = p.id WHERE lp.license_id = ? AND p.status = 'active' AND p.is_frozen = 0").bind(auth.licenseId).all<{ id: string; name: string; description: string; github_repository: string }>();
   const platforms = ["windows-x64", "macos-arm64", "macos-x64"];
   const latestByProduct = new Map<string, GithubRelease>();
   await Promise.all(products.results.map(async (product) => { latestByProduct.set(product.id, await fetchLatestGithubRelease(env, product.github_repository)); }));
   const allowed = products.results.flatMap((product) => platforms.map((platform) => {
-    const grant = grants.results.find((item) => item.product_id === product.id && JSON.parse(item.platforms_json).includes(platform));
+    const grant = grants.results.find((item) => item.product_id === product.id);
     if (!grant) return null;
     const release = resolveGithubRelease(product.github_repository, product.id, latestByProduct.get(product.id)!, platform);
     if (!release) return null;
-    return { ...release, download_url: `/api/download/${encodeURIComponent(release.id)}?license_id=${encodeURIComponent(auth.licenseId)}` };
+    return { ...release, download_url: `/api/download/${encodeURIComponent(release.id)}?license_id=${encodeURIComponent(auth.licenseId)}&product_id=${encodeURIComponent(release.product_id)}&platform=${encodeURIComponent(release.platform)}` };
   })).filter((release): release is ResolvedRelease & { download_url: string } => release !== null);
-  if (allowed.length) {
-    await env.DB.batch(allowed.map((release) => env.DB.prepare("INSERT OR REPLACE INTO releases (id, product_id, version, platform, asset_url, sha256, file_name, launch_path, signature, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 'active')").bind(release.id, release.product_id, release.version, release.platform, release.asset_url, release.sha256, release.file_name, release.launch_path)));
-  }
   return json({ products: products.results, releases: allowed });
 }
 
@@ -127,11 +124,22 @@ async function refreshLicense(request: Request, env: Env): Promise<Response> {
 
 async function download(request: Request, env: Env, releaseId: string): Promise<Response> {
   const auth = await authenticateDevice(request, env); if (auth instanceof Response) return auth;
-  const release = await env.DB.prepare("SELECT r.product_id, r.version, r.platform, r.asset_url, p.github_repository FROM releases r JOIN products p ON p.id = r.product_id WHERE r.id = ? AND r.status = 'active' AND p.status = 'active' AND p.is_frozen = 0").bind(releaseId).first<{ product_id: string; version: string; platform: string; asset_url: string; github_repository: string }>();
-  if (!release) return error("版本不存在或目录已更新，请重新在线检查更新", 404);
-  const grant = await env.DB.prepare("SELECT platforms_json FROM license_products WHERE license_id = ? AND product_id = ?").bind(auth.licenseId, release.product_id).first<{ platforms_json: string }>();
-  if (!grant || !JSON.parse(grant.platforms_json).includes(release.platform)) return error("无权下载该产品", 403);
-  if (!trustedGithubAsset(release.asset_url, release.github_repository)) return error("版本下载地址不在允许的 GitHub 仓库范围内", 500);
+  const url = new URL(request.url);
+  const productId = url.searchParams.get("product_id") ?? "";
+  const platform = url.searchParams.get("platform") ?? "";
+  if (!productId || !["windows-x64", "macos-arm64", "macos-x64"].includes(platform)) return error("下载参数无效", 400);
+  const product = await env.DB.prepare("SELECT id, github_repository FROM products WHERE id = ? AND status = 'active' AND is_frozen = 0").bind(productId).first<{ id: string; github_repository: string }>();
+  if (!product) return error("产品不存在或已禁用", 404);
+  const grant = await env.DB.prepare("SELECT 1 AS allowed FROM license_products WHERE license_id = ? AND product_id = ?").bind(auth.licenseId, productId).first<{ allowed: number }>();
+  if (!grant) return error("无权下载该产品", 403);
+  let release: ResolvedRelease | null;
+  try {
+    release = resolveGithubRelease(product.github_repository, productId, await fetchLatestGithubRelease(env, product.github_repository), platform);
+  } catch (e) {
+    return error(e instanceof Error ? e.message : "无法读取产品最新版本", 502);
+  }
+  if (!release || release.id !== releaseId) return error("版本已更新，请重新在线检查更新", 404);
+  if (!trustedGithubAsset(release.asset_url, product.github_repository)) return error("版本下载地址不在允许的 GitHub 仓库范围内", 500);
   if (!env.GITHUB_TOKEN) return error("服务端未配置 GitHub Token", 500);
   let upstream = await fetch(release.asset_url, { headers: { accept: "application/octet-stream", authorization: `Bearer ${env.GITHUB_TOKEN}`, "user-agent": "WaveDAQ-License-Worker" }, redirect: "manual" });
   if (upstream.status >= 300 && upstream.status < 400) {
@@ -222,7 +230,7 @@ async function admin(request: Request, env: Env, path: string): Promise<Response
   }
   if (request.method === "DELETE" && productIdMatch) {
     const productId = decodeURIComponent(productIdMatch[1]);
-    const references = await env.DB.prepare("SELECT (SELECT COUNT(*) FROM license_products WHERE product_id = ?) + (SELECT COUNT(*) FROM releases WHERE product_id = ?) AS total").bind(productId, productId).first<{ total: number }>();
+    const references = await env.DB.prepare("SELECT COUNT(*) AS total FROM license_products WHERE product_id = ?").bind(productId).first<{ total: number }>();
     if (references && references.total > 0) {
       const archived = await env.DB.prepare("UPDATE products SET status = 'disabled', is_frozen = 0 WHERE id = ?").bind(productId).run();
       if (!archived.meta.changes) return error("产品不存在", 404);
@@ -234,7 +242,6 @@ async function admin(request: Request, env: Env, path: string): Promise<Response
   }
   if (request.method === "GET" && path === "/licenses") return json({ licenses: (await env.DB.prepare("SELECT l.id, l.name, l.status, l.is_frozen, l.term, l.expires_at, l.created_at, CASE WHEN l.code_ciphertext IS NULL THEN 0 ELSE 1 END AS has_code, GROUP_CONCAT(DISTINCT p.name) AS product_names, MAX(a.activated_at) AS activated_at, GROUP_CONCAT(DISTINCT a.device_id) AS device_ids, MIN(d.created_at) AS first_bound_at FROM licenses l LEFT JOIN license_products lp ON lp.license_id = l.id LEFT JOIN products p ON p.id = lp.product_id LEFT JOIN activations a ON a.license_id = l.id LEFT JOIN devices d ON d.id = a.device_id GROUP BY l.id ORDER BY l.created_at DESC LIMIT 200").all()).results });
   if (request.method === "GET" && path === "/devices") return json({ devices: (await env.DB.prepare("SELECT id, fingerprint, status, created_at, last_seen_at FROM devices ORDER BY created_at DESC LIMIT 200").all()).results });
-  if (request.method === "GET" && path === "/releases") return json({ releases: [] });
   if (request.method === "POST" && path === "/licenses") {
     const input = await body<CreateLicenseRequest>(request);
     const name = input.name?.trim();
@@ -251,7 +258,7 @@ async function admin(request: Request, env: Env, path: string): Promise<Response
     if (term !== "永久授权" && term !== "自定义") return error("授权期限只能是永久授权或自定义");
     if (term === "永久授权" && expiresAt) return error("永久授权不能设置过期时间");
     if (term === "自定义" && !expiresAt) return error("自定义授权必须设置过期时间");
-    const statements = [env.DB.prepare("INSERT INTO licenses (id, name, code_hash, code_ciphertext, expires_at, term) VALUES (?, ?, ?, ?, ?, ?)").bind(licenseId, name, hash, encryptedCode, expiresAt, term), ...productIds.map((productId) => env.DB.prepare("INSERT INTO license_products (license_id, product_id, platforms_json, features_json) VALUES (?, ?, ?, ?)").bind(licenseId, productId, JSON.stringify(["windows-x64", "macos-arm64", "macos-x64"]), JSON.stringify([])))];
+    const statements = [env.DB.prepare("INSERT INTO licenses (id, name, code_hash, code_ciphertext, expires_at, term) VALUES (?, ?, ?, ?, ?, ?)").bind(licenseId, name, hash, encryptedCode, expiresAt, term), ...productIds.map((productId) => env.DB.prepare("INSERT INTO license_products (license_id, product_id) VALUES (?, ?)").bind(licenseId, productId))];
     try {
       await env.DB.batch(statements);
     } catch {

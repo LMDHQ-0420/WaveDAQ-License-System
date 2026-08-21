@@ -9,7 +9,6 @@ export interface Env {
 export interface ProductPermission {
   product_id: string;
   platforms: string[];
-  features?: string[];
 }
 
 export interface LicenseDocument {
