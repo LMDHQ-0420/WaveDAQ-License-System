@@ -18,14 +18,7 @@
 
 | 图示 | 软件 | 说明 |
 |---|---|---|
-| <img src="assets/WaveDAG.png" width="180" alt="WaveDAQ 界面"/> | **WaveDAQ** | 8 通道 UDP 实时数据采集与波形显示上位机。通过 Launcher 完成授权、安装和启动。 |
-| <img src="logo.png" width="120" alt="WaveDAQ License System"/> | **WaveDAQ-Launcher** | 统一的授权、产品安装和启动入口，可继续扩展支持其他桌面软件。 |
-
-### WaveDAQ
-
-WaveDAQ 是一个面向实验数据采集的桌面软件，支持 8 通道 UDP 实时数据接收、波形显示和数据处理。它是本验证系统当前支持的产品之一，产品本体和授权系统分开维护。
-
-WaveDAQ License System 是一个面向多个桌面软件的授权、分发和离线校验系统。管理员可以登记多个产品及其 GitHub 仓库，用户通过统一的 Launcher 完成设备激活、产品安装和启动。
+| <img src="assets/WaveDAG.png" width="180" alt="WaveDAQ 界面"/> | **WaveDAQ** | WaveDAQ 是一个面向实验数据采集的桌面软件，支持 8 通道 UDP 实时数据接收、波形显示和数据处理。 |
 
 ## 用户使用
 
