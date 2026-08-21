@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.png" width="120" alt="License System Logo"/>
+  <img src="assets/logo.png" width="120" alt="License System Logo"/>
 </p>
 
 <h1 align="center">WaveDAQ License System</h1>
@@ -18,15 +18,17 @@
 
 | Image | Software | Description |
 |---|---|---|
-| <img src="assets/WaveDAG.png" width="180" alt="WaveDAQ interface"/> | [**WaveDAQ**](https://github.com/LMDHQ-0420/WaveDAQ) | WaveDAQ is a desktop data-acquisition and waveform-analysis application for experimental work, supporting 8-channel UDP real-time data reception, data acquisition, online filtering, channel selection, and flexible control of waveform display styles, display ranges, and interface layout for real-time observation and processing of multi-channel experimental data. |
+| <img src="assets/WaveDAG.png" width="180" alt="WaveDAQ interface"/> | [**WaveDAQ**](https://github.com/LMDHQ-0420/WaveDAQ) | WaveDAQ is a desktop data-acquisition and waveform-analysis application for experimental work, supporting 8-channel UDP real-time data reception, data acquisition, online filtering, channel selection, and flexible control of waveform display styles, display ranges, and interface layout for real-time observation and processing of multi-channel experimental data. For security reasons, WaveDAQ is not open source; please contact [sunyuxiang25@mails.ucas.edu.cn](mailto:sunyuxiang25@mails.ucas.edu.cn) if needed. |
 | <img src="assets/MTFGesture1.0.png" width="180" alt="MTFGesture 1.0"/> | [**MTFGesture 1.0**](https://github.com/LMDHQ-0420/MTFGesture1.0) | MTFGesture 1.0 is a real-time deep-learning gesture-recognition system based on multi-channel sensor signals, combining a lightweight desktop monitor with the MTF-GestureNet multi-scale time-frequency gesture network. It performs real-time deep-learning inference and visualization at 10 Hz, showing three-channel waveforms, Softmax probabilities for 10 classes, and the predicted result, achieving **96.76%** test accuracy and a **0.9663** test macro F1 score on 10 gesture classes; at deployment, a 5-second silent calibration establishes the noise baseline and DC offset, after which five samples for each class can be collected to fine-tune the classification head with the current sensor and user, or fine-tuning can be skipped to use the pretrained base model. |
 | <img src="assets/MTFGesture2.0.png" width="180" alt="MTFGesture 2.0"/> | [**MTFGesture 2.0**](https://github.com/LMDHQ-0420/MTFGesture2.0) | MTFGesture 2.0 belongs to the same multi-scale time-frequency gesture-recognition system as MTFGesture 1.0 and supports real-time deep-learning computation, gesture recognition, and desktop visualization from multi-channel sensor signals, achieving **96.76%** test accuracy and a **0.9663** test macro F1 score on 10 gesture classes while supporting deployment-time model fine-tuning through silent calibration and prompted gesture capture; in addition to real-time three-channel waveforms, class probabilities, and classification results, version 2.0 also provides visualization of model input features to make the input signals and model-analysis process easier to inspect. |
+
+> For customization requests, please contact [sunyuxiang25@mails.ucas.edu.cn](mailto:sunyuxiang25@mails.ucas.edu.cn)
 
 ## User Guide
 
 ### 1. Download the verification software
 
-Download the appropriate WaveDAQ-Launcher package from [GitHub Releases](https://github.com/LMDHQ-0420/WaveDAQ-License-System/releases). On macOS, download the ZIP for your architecture; on Windows, download the installer ending in `-setup.exe`.
+Download the appropriate WaveDAQ-Launcher package from [GitHub Releases](https://github.com/LMDHQ-0420/WaveDAQ-License-System/releases). On macOS, download the DMG for your architecture; on Windows, download the installer ending in `-setup.exe`.
 
 ### 2. Get an activation code
 
@@ -149,7 +151,8 @@ WaveDAQ-License-System/
 │   ├── app.ico                           # Windows application icon
 │   ├── WaveDAG.png                       # WaveDAQ interface image
 │   ├── MTFGesture1.0.png                 # MTFGesture 1.0 interface image
-│   └── MTFGesture2.0.png                 # MTFGesture 2.0 interface image
+│   ├── MTFGesture2.0.png                 # MTFGesture 2.0 interface image
+│   └── logo.png                           # License system logo
 ├── license_sdk/                         # Offline verification module for products
 │   ├── __init__.py
 │   ├── config.py                        # Product ID and server public key
@@ -163,7 +166,6 @@ WaveDAQ-License-System/
 │   ├── shared/license-schema.json       # Offline license document schema
 │   └── tools/                           # Key, activation code, and password tools
 ├── .gitignore
-├── logo.png
 └── README.md
 ```
 
