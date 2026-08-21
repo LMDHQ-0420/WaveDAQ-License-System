@@ -3,7 +3,7 @@ import sys
 from PyInstaller.utils.hooks import collect_submodules
 
 hiddenimports = collect_submodules("cryptography") + ["PySide6.QtSvg"]
-app_icon = "assets/app.icns" if sys.platform == "darwin" else "assets/app.ico"
+app_icon = "../assets/app.icns" if sys.platform == "darwin" else "../assets/app.ico"
 
 a = Analysis(
     ["src/main.py"],

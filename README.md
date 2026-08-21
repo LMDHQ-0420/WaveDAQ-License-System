@@ -14,13 +14,24 @@
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey" alt="Platforms"/>
 </p>
 
+## 支持的软件
+
+| 图示 | 软件 | 说明 |
+|---|---|---|
+| <img src="assets/WaveDAG.png" width="180" alt="WaveDAQ 界面"/> | **WaveDAQ** | 8 通道 UDP 实时数据采集与波形显示上位机。通过 Launcher 完成授权、安装和启动。 |
+| <img src="logo.png" width="120" alt="WaveDAQ License System"/> | **WaveDAQ-Launcher** | 统一的授权、产品安装和启动入口，可继续扩展支持其他桌面软件。 |
+
+### WaveDAQ
+
+WaveDAQ 是一个面向实验数据采集的桌面软件，支持 8 通道 UDP 实时数据接收、波形显示和数据处理。它是本验证系统当前支持的产品之一，产品本体和授权系统分开维护。
+
 WaveDAQ License System 是一个面向多个桌面软件的授权、分发和离线校验系统。管理员可以登记多个产品及其 GitHub 仓库，用户通过统一的 Launcher 完成设备激活、产品安装和启动。
 
 ## 用户使用
 
 ### 一、获取验证软件
 
-验证系统发行包位于 [GitHub Releases](https://github.com/LMDHQ-0420/WaveDAQ-License-System/releases)。根据操作系统下载对应的 WaveDAQ-Launcher，解压后直接启动图形程序。
+验证系统发行包位于 [GitHub Releases](https://github.com/LMDHQ-0420/WaveDAQ-License-System/releases)。macOS 下载对应的 DMG，Windows 下载带有 `-setup.exe` 后缀的安装程序。
 
 ### 二、获取激活码
 
@@ -136,16 +147,22 @@ WaveDAQ-License-System/
 │   ├── src/gui.py                       # 激活、产品列表、下载和启动界面
 │   ├── src/api_client.py                # 激活、刷新、Release 和下载请求
 │   ├── src/config.py                    # Worker URL 和服务器公钥
-│   ├── src/device_identity.py           # 设备 Ed25519 密钥和系统密钥环
+│   ├── src/device_identity.py           # 设备 Ed25519 密钥和机器码绑定
 │   ├── src/license_verifier.py          # Launcher 授权校验
 │   ├── src/local_storage.py             # 授权、缓存和安装记录
 │   ├── src/release_downloader.py        # 下载和 SHA-256 校验
 │   ├── src/software_installer.py        # 安装包打开和产品启动
 │   ├── tests/                           # Launcher 测试
+│   ├── installer/WaveDAQ-Launcher.iss   # Windows 安装程序配置
 │   └── Launcher.spec                    # PyInstaller 配置
+├── assets/                              # 发布图标和项目展示图片
+│   ├── app.icns                          # macOS 应用图标
+│   ├── app.ico                           # Windows 应用图标
+│   └── WaveDAG.png                       # WaveDAQ 界面图
 ├── license_sdk/                         # 产品侧可复制的离线验证模块
 │   ├── __init__.py
-│   ├── config.py                        # 产品 ID和服务器公钥
+│   ├── config.py                        # 产品 ID 和服务器公钥
+│   ├── local_crypto.py                  # 机器码绑定的本地加密
 │   └── verifier.py                      # 签名、设备、期限、平台校验
 ├── cloudflare/
 │   ├── package.json                     # Cloudflare 子项目脚本
@@ -405,7 +422,7 @@ Linux：
 `<系统数据目录>/WaveDAQ-Launcher/downloads/<product_id>/<version>/<file_name>`。
 `installations.json` 保存已下载产品的版本、平台、安装包路径和启动路径；macOS 产品的默认启动路径由 Release 元数据提供，Windows 产品默认直接启动下载后的文件。Launcher 不把产品安装到自己的 Python 或 Conda 环境中。
 
-设备私钥和防时间回拨数据不访问 macOS Keychain、Windows Credential Manager 或 Linux Secret Service，而是使用本地机器码派生密钥加密后保存在应用数据目录中。
+设备私钥、授权文件和防时间回拨数据不访问 macOS Keychain、Windows Credential Manager 或 Linux Secret Service，而是使用本地机器码派生密钥加密后保存在应用数据目录中。Launcher 启动时先校验机器码；激活完成后，Launcher 和产品默认使用本地签名授权离线启动，只有激活、刷新和下载操作需要联网。
 
 ### 七、在其他软件中接入验证模块
 

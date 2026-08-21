@@ -14,13 +14,24 @@
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey" alt="Platforms"/>
 </p>
 
+## Supported Software
+
+| Image | Software | Description |
+|---|---|---|
+| <img src="assets/WaveDAG.png" width="180" alt="WaveDAQ interface"/> | **WaveDAQ** | An 8-channel UDP real-time data acquisition and waveform display application. Authorization, installation, and launch are handled by the Launcher. |
+| <img src="logo.png" width="120" alt="WaveDAQ License System"/> | **WaveDAQ-Launcher** | The unified authorization, product installation, and launch entry point. It can support additional desktop products. |
+
+### WaveDAQ
+
+WaveDAQ is a desktop application for experimental data acquisition. It supports 8-channel UDP real-time data reception, waveform display, and data processing. It is one of the products currently supported by this verification system; the product and the licensing system are maintained separately.
+
 WaveDAQ License System is a licensing, distribution, and offline verification system for multiple desktop applications. Administrators register products and GitHub repositories. Users activate their device, install products, and launch them through one Launcher.
 
 ## User Guide
 
 ### 1. Download the verification software
 
-Download the appropriate WaveDAQ-Launcher package from [GitHub Releases](https://github.com/LMDHQ-0420/WaveDAQ-License-System/releases), extract it, and launch the graphical application.
+Download the appropriate WaveDAQ-Launcher package from [GitHub Releases](https://github.com/LMDHQ-0420/WaveDAQ-License-System/releases). On macOS, download the DMG; on Windows, download the installer ending in `-setup.exe`.
 
 ### 2. Get an activation code
 
@@ -136,10 +147,16 @@ WaveDAQ-License-System/
 │   ├── src/release_downloader.py        # Download and SHA-256 verification
 │   ├── src/software_installer.py        # Installer opening and product launch
 │   ├── tests/                           # Launcher tests
+│   ├── installer/WaveDAQ-Launcher.iss  # Windows installer configuration
 │   └── Launcher.spec                    # PyInstaller configuration
+├── assets/                              # Release icons and project images
+│   ├── app.icns                          # macOS application icon
+│   ├── app.ico                           # Windows application icon
+│   └── WaveDAG.png                       # WaveDAQ interface image
 ├── license_sdk/                         # Offline verification module for products
 │   ├── __init__.py
 │   ├── config.py                        # Product ID and server public key
+│   ├── local_crypto.py                  # Machine-bound local encryption
 │   └── verifier.py                      # Signature, device, term, and platform checks
 ├── cloudflare/
 │   ├── package.json                     # Cloudflare project scripts
@@ -244,7 +261,7 @@ Linux:   ~/.config/WaveDAQ-Launcher/
 
 The directory contains `device.json`, `license.json`, `licenses/`, `catalogs/`, `installations.json`, `downloads/`, and `revoked_licenses.json`. Packages are stored at `<data directory>/WaveDAQ-Launcher/downloads/<product_id>/<version>/<file_name>`.
 
-Device private keys and anti-clock-rollback data are stored in the operating system keychain rather than ordinary JSON files.
+Device private keys, license files, and anti-clock-rollback data do not use macOS Keychain, Windows Credential Manager, or Linux Secret Service. They are encrypted with a key derived from the local machine code and stored in the application data directory. The Launcher checks the machine code before startup; after activation, normal startup and license verification are offline by default.
 
 ### 7. Add the verification module to another product
 

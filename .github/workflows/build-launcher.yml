@@ -19,8 +19,6 @@ jobs:
           python-version: '3.11'
       - name: Install dependencies
         run: pip install -r launcher/requirements.txt pyinstaller
-      - name: Generate application icons
-        run: python launcher/tools/generate_icons.py
       - name: Build Launcher
         working-directory: launcher
         run: pyinstaller Launcher.spec
@@ -52,8 +50,6 @@ jobs:
           python-version: '3.11'
       - name: Install dependencies
         run: pip install -r launcher/requirements.txt pyinstaller
-      - name: Generate application icons
-        run: python launcher/tools/generate_icons.py
       - name: Build Launcher
         working-directory: launcher
         run: pyinstaller Launcher.spec
@@ -85,8 +81,6 @@ jobs:
           python-version: '3.11'
       - name: Install dependencies
         run: pip install -r launcher/requirements.txt pyinstaller
-      - name: Generate application icons
-        run: python launcher/tools/generate_icons.py
       - name: Build Launcher
         working-directory: launcher
         run: pyinstaller Launcher.spec

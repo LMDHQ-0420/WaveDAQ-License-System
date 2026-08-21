@@ -14,7 +14,7 @@ OutputBaseFilename=WaveDAQ-Launcher-windows-x64-{#ReleaseTag}-setup
 Compression=lzma
 SolidCompression=yes
 ArchitecturesInstallIn64BitMode=x64
-SetupIconFile=..\assets\app.ico
+SetupIconFile=..\..\assets\app.ico
 UninstallDisplayIcon={app}\WaveDAQ-Launcher.exe
 
 [Files]
