@@ -18,11 +18,22 @@
 
 | Image | Software | Description |
 |---|---|---|
-| <img src="assets/WaveDAG.png" width="180" alt="WaveDAQ interface"/> | [**WaveDAQ**](https://github.com/LMDHQ-0420/WaveDAQ) | WaveDAQ is a desktop data-acquisition and waveform-analysis application for experimental work, supporting 8-channel UDP real-time data reception, data acquisition, online filtering, channel selection, and flexible control of waveform display styles, display ranges, and interface layout for real-time observation and processing of multi-channel experimental data. For security reasons, WaveDAQ is not open source; please contact [sunyuxiang25@mails.ucas.edu.cn](mailto:sunyuxiang25@mails.ucas.edu.cn) if needed. |
+| <img src="assets/WaveDAG.png" width="180" alt="WaveDAQ interface"/> | [**WaveDAQ**](WaveDAQ-EN.md) | WaveDAQ is a desktop data-acquisition and waveform-analysis application for experimental work, supporting 8-channel UDP real-time data reception, data acquisition, online filtering, channel selection, and flexible control of waveform display styles, display ranges, and interface layout for real-time observation and processing of multi-channel experimental data. For security reasons, WaveDAQ is not open source; please contact [sunyuxiang25@mails.ucas.edu.cn](mailto:sunyuxiang25@mails.ucas.edu.cn) if needed. |
 | <img src="assets/MTFGesture1.0.png" width="180" alt="MTFGesture 1.0"/> | [**MTFGesture 1.0**](https://github.com/LMDHQ-0420/MTFGesture1.0) | MTFGesture 1.0 is a real-time deep-learning gesture-recognition system based on multi-channel sensor signals, combining a lightweight desktop monitor with the MTF-GestureNet multi-scale time-frequency gesture network. It performs real-time deep-learning inference and visualization at 10 Hz, showing three-channel waveforms, Softmax probabilities for 10 classes, and the predicted result, achieving **96.76%** test accuracy and a **0.9663** test macro F1 score on 10 gesture classes; at deployment, a 5-second silent calibration establishes the noise baseline and DC offset, after which five samples for each class can be collected to fine-tune the classification head with the current sensor and user, or fine-tuning can be skipped to use the pretrained base model. |
 | <img src="assets/MTFGesture2.0.png" width="180" alt="MTFGesture 2.0"/> | [**MTFGesture 2.0**](https://github.com/LMDHQ-0420/MTFGesture2.0) | MTFGesture 2.0 belongs to the same multi-scale time-frequency gesture-recognition system as MTFGesture 1.0 and supports real-time deep-learning computation, gesture recognition, and desktop visualization from multi-channel sensor signals, achieving **96.76%** test accuracy and a **0.9663** test macro F1 score on 10 gesture classes while supporting deployment-time model fine-tuning through silent calibration and prompted gesture capture; in addition to real-time three-channel waveforms, class probabilities, and classification results, version 2.0 also provides visualization of model input features to make the input signals and model-analysis process easier to inspect. |
 
 > For customization requests, please contact [sunyuxiang25@mails.ucas.edu.cn](mailto:sunyuxiang25@mails.ucas.edu.cn)
+
+## News
+
+- 🎉 **[2026/07/10]** WaveDAQ 1.0 released! It introduced 8-channel UDP real-time acquisition, waveform display, data recording, CSV export, and initial cross-platform packaging.
+- 🚀 **[2026/07/10]** WaveDAQ 1.1 released! The macOS and Windows packaging workflows were improved with application icons, platform-specific packages, and GitHub Actions builds.
+- ✨ **[2026/07/16]** WaveDAQ 2.0 released! The interface and plotting system were redesigned with per-channel display, channel ordering, and more flexible visualization settings.
+- 📚 **[2026/07/13]** WaveDAQ 2.1 released! The project documentation and bilingual usage instructions were expanded with cross-platform, download, and project-structure guidance.
+- 🔐 **[2026/08/21]** WaveDAQ 3.0 released! It introduced offline device licensing with local verification, signed license files, and license-term management.
+- 🛡️ **[2026/08/21]** WaveDAQ 3.1 released! License verification and Launcher integration were refined, Keychain dependency was removed, and packaging and authorization-error handling were improved.
+- 🔐 **[2026/08/21]** WaveDAQ-License-System released! It provides offline device licensing, activation-code management, software distribution, and a cross-platform Launcher.
+- 📊 **[2026/08/22]** WaveDAQ 4.0 released! New data-analysis features include peak/valley detection, adaptive filtering, CSV import, and time and detection-result export.
 
 ## User Guide
 

@@ -18,11 +18,22 @@
 
 | 图示 | 软件 | 说明 |
 |---|---|---|
-| <img src="assets/WaveDAG.png" width="180" alt="WaveDAQ 界面"/> | [**WaveDAQ**](https://github.com/LMDHQ-0420/WaveDAQ) | WaveDAQ 是面向实验场景的桌面数据采集与波形分析软件，支持 8 通道 UDP 实时数据接收、数据采集、在线滤波、通道选择，并支持灵活设置波形显示风格、显示范围和界面布局，便于用户实时观察和处理多通道实验数据。出于安全考虑，WaveDAQ 并未开源，如有需求，请联系 [sunyuxiang25@mails.ucas.edu.cn](mailto:sunyuxiang25@mails.ucas.edu.cn)。 |
+| <img src="assets/WaveDAG.png" width="180" alt="WaveDAQ 界面"/> | [**WaveDAQ**](WaveDAQ.md) | WaveDAQ 是面向实验场景的桌面数据采集与波形分析软件，支持 8 通道 UDP 实时数据接收、数据采集、在线滤波、通道选择，并支持灵活设置波形显示风格、显示范围和界面布局，便于用户实时观察和处理多通道实验数据。出于安全考虑，WaveDAQ 并未开源，如有需求，请联系 [sunyuxiang25@mails.ucas.edu.cn](mailto:sunyuxiang25@mails.ucas.edu.cn)。 |
 | <img src="assets/MTFGesture1.0.png" width="180" alt="MTFGesture 1.0"/> | [**MTFGesture 1.0**](https://github.com/LMDHQ-0420/MTFGesture1.0) | MTFGesture 1.0 是基于多通道传感器信号的实时深度学习手势识别系统，包含轻量级桌面监视器和 MTF-GestureNet 多尺度时频手势网络，可实时完成深度学习推理与可视化，以 10 Hz 显示 3 通道波形、10 类 Softmax 概率和预测结果，在 10 个手势类别上测试准确率达到 **96.76%**、测试宏 F1 达到 **0.9663**；系统启动时先进行 5 秒静默校准建立噪声基线和直流偏移，再可采集 10 类手势各 5 次，在部署现场使用当前传感器和使用者数据实时微调分类头，也可以跳过微调直接使用预训练基础模型。 |
 | <img src="assets/MTFGesture2.0.png" width="180" alt="MTFGesture 2.0"/> | [**MTFGesture 2.0**](https://github.com/LMDHQ-0420/MTFGesture2.0) | MTFGesture 2.0 与 MTFGesture 1.0 属于同一套多尺度时频手势识别系统，支持基于多通道传感器信号的实时深度学习计算、手势识别和桌面可视化，在 10 个手势类别上测试准确率达到 **96.76%**、测试宏 F1 达到 **0.9663**，并支持启动时通过静默校准和手势采集在部署现场实时微调模型；除实时显示 3 通道波形、10 类概率和分类结果外，2.0 还额外提供模型输入特征的可视化，帮助观察输入信号和模型分析过程。 |
 
 > 如果有定制需求，请联系：[sunyuxiang25@mails.ucas.edu.cn](mailto:sunyuxiang25@mails.ucas.edu.cn)
+
+## News
+
+- 🎉 **[2026/07/10]** 发布 WaveDAQ 1.0！完成八通道 UDP 实时采集、波形显示、数据记录、CSV 导出及基础跨平台打包。
+- 🚀 **[2026/07/10]** 发布 WaveDAQ 1.1！优化 macOS 与 Windows 打包流程，完善应用图标、安装包格式及 GitHub 自动构建。
+- ✨ **[2026/07/16]** 发布 WaveDAQ 2.0！重构界面与绘图系统，新增通道独立显示、显示顺序调整及更加灵活的显示设置。
+- 📚 **[2026/07/13]** 发布 WaveDAQ 2.1！完善项目文档和中英文使用说明，补充跨平台运行、下载及项目结构介绍。
+- 🔐 **[2026/08/21]** 发布 WaveDAQ 3.0！引入离线设备授权体系，支持本机授权校验、签名授权文件及授权期限管理。
+- 🛡️ **[2026/08/21]** 发布 WaveDAQ 3.1！优化授权验证和 Launcher 集成，移除 Keychain 依赖，并完善跨平台打包与授权失败提示。
+- 🔐 **[2026/08/21]** 发布 WaveDAQ-License-System！提供离线设备授权、激活码管理、软件分发及跨平台 Launcher 支持。
+- 📊 **[2026/08/22]** 发布 WaveDAQ 4.0！新增波峰波谷检测、自适应滤波、CSV 导入、时间与检测结果导出等数据分析功能。
 
 ## 用户使用
 
