@@ -2,8 +2,6 @@
 
 WaveDAQ is a desktop data-acquisition and waveform-analysis application for multi-channel sensor experiments. It supports 8-channel UDP data reception, real-time waveform display, record management, threshold filtering, peak and valley detection, CSV import and export, and customizable display settings. This guide describes the main features, common workflows, data formats, and troubleshooting steps.
 
-> Images in this document use reserved files in the `assets/` directory. Add the screenshots using the filenames listed in the Chinese guide or at the end of this document.
-
 ## 1. Interface overview
 
 <p align="center"><img src="assets/WaveDAQ-main.png" width="66%" alt="WaveDAQ main interface"/></p>
