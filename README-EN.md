@@ -30,7 +30,7 @@
 - 🎉 **[2026/07/10]** WaveDAQ 1.0 released! It introduced 8-channel UDP real-time acquisition, waveform display, data recording, CSV export, and initial cross-platform packaging.
 - 🚀 **[2026/07/10]** WaveDAQ 1.1 released! The macOS and Windows packaging workflows were improved with application icons, platform-specific packages, and GitHub Actions builds.
 - ✨ **[2026/07/16]** WaveDAQ 2.0 released! The interface and plotting system were redesigned with per-channel display, channel ordering, and more flexible visualization settings.
-- 📚 **[2026/07/13]** WaveDAQ 2.1 released! The project documentation and bilingual usage instructions were expanded with cross-platform, download, and project-structure guidance.
+- 📚 **[2026/08/13]** WaveDAQ 2.1 released! The project documentation and bilingual usage instructions were expanded with cross-platform, download, and project-structure guidance.
 - 🔐 **[2026/08/21]** WaveDAQ 3.0 released! It introduced offline device licensing with local verification, signed license files, and license-term management.
 - 🛡️ **[2026/08/21]** WaveDAQ 3.1 released! License verification and Launcher integration were refined, Keychain dependency was removed, and packaging and authorization-error handling were improved.
 - 🔐 **[2026/08/21]** WaveDAQ-License-System released! It provides offline device licensing, activation-code management, software distribution, and a cross-platform Launcher.
