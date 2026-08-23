@@ -97,7 +97,7 @@ def verify_device_binding(document: dict[str, Any], identity: dict[str, str]) ->
         derived_public = base64.urlsafe_b64encode(private.public_key().public_bytes_raw()).decode("ascii").rstrip("=")
         if derived_public != identity.get("public_key"):
             raise ValueError("设备私钥与公钥不匹配")
-        challenge = b"wavedaq-local-license-check"
+        challenge = b"license-sdk-local-license-check"
         private.public_key().verify(private.sign(challenge), challenge)
     except Exception as exc:
         raise LicenseError("授权签名或设备私钥验证失败") from exc

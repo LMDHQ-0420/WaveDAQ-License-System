@@ -289,9 +289,13 @@ Call `require_valid_license()` from the real product entry point before starting
 
 ### 8. Configure GitHub packaging for a new product
 
-A new product should maintain its source code and packaging workflow in its own GitHub repository; it does not need to copy the entire WaveDAQ-License-System. First create the product in the administrator console with a unique product ID, product name, and GitHub repository URL. Then copy `license_sdk/` into the product project, configure the product ID and server public key, and call the local license check from the real product entry point. The product repository should contain `.github/workflows/build.yaml`, use GitHub Actions to build separate packages on macOS Apple Silicon, macOS Intel, and Windows x64, and upload the results to a GitHub Release. Release tags use a `v`-prefixed version such as `v1.0.0` or `v1.1.0`; the Launcher reads the latest Release, so versions do not need to be stored in D1.
+A new product should maintain its source code and packaging workflow in its own GitHub repository; it does not need to copy the entire WaveDAQ-License-System. First create the product in the administrator console with a unique product ID, product name, and GitHub repository URL. Then copy `license_sdk/` into the product project, configure the product ID and server public key, and call the local license check from the real product entry point. The product repository should contain `.github/workflows/build.yaml`, use GitHub Actions to build separate packages on macOS Apple Silicon, macOS Intel, and Windows x64, and upload the results to a GitHub Release. The workflow listens to all GitHub Tags; `v1.0.0` and `v1.1.0` are recommended. The Launcher uses the GitHub Release Tag as the version, not the platform portion of an asset filename, so versions do not need to be stored in D1.
 
 The Worker identifies platform assets from their file names, so each name must contain `macos-arm64`, `macos-x64`, or `windows-x64`. macOS products use DMG packages, while Windows products use directly launchable EXE files; the Launcher stores downloaded products in its own data directory and starts them without a traditional installer. After assets are uploaded, GitHub provides a SHA-256 digest automatically. The Worker reads that digest, and the Launcher computes SHA-256 again after downloading before saving or launching the product. The complete example below can be placed at `.github/workflows/build.yaml` in a new product repository. It assumes that the product entry point is `app/main.py`, dependencies are listed in `requirements.txt`, and icons are located at `assets/app.icns` and `assets/app.ico`; change these paths and `APP_NAME` for the actual project.
+
+#### Template replacement and release steps
+
+After copying the template, replace at least these values: replace `APP_NAME` with the product display name; replace `app/main.py` with the real entry point; replace `requirements.txt` with the project dependency file; replace `assets/app.icns` and `assets/app.ico` with the actual icon paths; and keep the PyInstaller `--name`, macOS application name, and Windows executable name consistent with `APP_NAME`. The `macos-14`, `macos-13`, and `windows-latest` runner settings normally do not need changes; only change `python-version` when the product requires another Python version. Keep `macos-arm64`, `macos-x64`, and `windows-x64` in asset filenames because the Worker uses them to match the user's platform. Keep `${{ github.ref_name }}` so GitHub supplies the current Tag; do not replace it with a fixed version. Save the file as `.github/workflows/build.yaml`, ensure Actions has `Contents: write` permission, commit it, and push a Tag such as `git tag v1.0.0 && git push origin v1.0.0`. The three build jobs then run in parallel, and the publish job creates the matching GitHub Release with all packages. Because the template listens to all Tags, non-`v` Tags also trigger it. An existing Tag does not rerun automatically after the workflow is changed; push a new Tag or rerun the workflow from GitHub Actions.
 
 ```yaml
 name: Build and Release Product
@@ -299,7 +303,7 @@ name: Build and Release Product
 on:
   push:
     tags:
-      - "v*"
+      - "*"
 
 permissions:
   contents: write

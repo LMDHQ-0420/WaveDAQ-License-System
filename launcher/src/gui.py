@@ -334,7 +334,10 @@ class LibraryPage(QtWidgets.QWidget):
                     save_license(refreshed, make_active=False)
                     refreshed_count += 1
                     try:
-                        save_catalog(license_id, api.releases(license_id, identity))
+                        catalog = api.releases(license_id, identity)
+                        save_catalog(license_id, catalog)
+                        for warning in catalog.get("warnings", []):
+                            warnings.append(f"{license_id[-8:]} 更新提示：{warning}")
                     except LicenseApiError as exc:
                         warnings.append(f"{license_id[-8:]} 更新目录失败：{exc}")
                 except LicenseApiError as exc:
@@ -436,7 +439,9 @@ class LibraryPage(QtWidgets.QWidget):
                 save_installation(record)
             launch(target)
         except Exception as exc:
-            self._set_notice(str(exc))
+            message = str(exc) or "未知启动错误"
+            self._set_notice(f"打开失败：{message}")
+            QtWidgets.QMessageBox.warning(self, "打开失败", message)
 
 
 class MainWindow(QtWidgets.QMainWindow):

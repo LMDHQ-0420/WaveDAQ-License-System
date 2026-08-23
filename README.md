@@ -475,9 +475,13 @@ start_application()
 
 ### 八、为新增软件配置 GitHub 自动打包
 
-新增软件需要在自己的 GitHub 仓库中维护代码和打包工作流，不需要把整个 WaveDAQ-License-System 复制到产品仓库。先在管理后台创建产品，填写唯一的产品 ID、产品名称和 GitHub 仓库链接，再将 `license_sdk/` 复制到产品项目中，配置产品 ID 和服务器公钥，并在产品主入口调用本地授权校验。产品仓库需要创建 `.github/workflows/build.yaml`，通过 GitHub Actions 在 macOS Apple Silicon、macOS Intel 和 Windows x64 上分别构建程序，并把构建结果上传到同一个 GitHub Release。Release 标签使用 `v` 开头的版本号，例如 `v1.0.0` 或 `v1.1.0`；Launcher 会读取最新 Release，不需要在数据库中维护版本号。
+新增软件需要在自己的 GitHub 仓库中维护代码和打包工作流，不需要把整个 WaveDAQ-License-System 复制到产品仓库。先在管理后台创建产品，填写唯一的产品 ID、产品名称和 GitHub 仓库链接，再将 `license_sdk/` 复制到产品项目中，配置产品 ID 和服务器公钥，并在产品主入口调用本地授权校验。产品仓库需要创建 `.github/workflows/build.yaml`，通过 GitHub Actions 在 macOS Apple Silicon、macOS Intel 和 Windows x64 上分别构建程序，并把构建结果上传到同一个 GitHub Release。工作流监听所有 GitHub Tag，推荐使用 `v1.0.0`、`v1.1.0` 这类版本 Tag；Launcher 使用 Release 的 Tag 作为版本号，不使用安装包文件名中的平台字段，也不需要在数据库中维护版本号。
 
 Worker 会按照安装包文件名识别平台，因此文件名必须包含 `macos-arm64`、`macos-x64` 或 `windows-x64`。macOS 安装包使用 DMG，Windows 产品使用可直接启动的 EXE；Launcher 下载后会将产品保存到自己的数据目录并直接启动，不需要传统安装程序。GitHub Release 上传资产后会自动提供 SHA-256 digest，Worker 会读取该 digest，Launcher 下载后再次计算 SHA-256，校验通过后才保存和启动。下面是一个可以放在新增产品仓库 `.github/workflows/build.yaml` 的完整示例，示例假设产品入口是 `app/main.py`，依赖文件是 `requirements.txt`，图标位于 `assets/app.icns` 和 `assets/app.ico`，实际项目只需按自己的目录修改这些路径和 `APP_NAME`。
+
+#### 模板替换和发布步骤
+
+复制模板后至少替换以下内容：`APP_NAME` 替换为软件显示名称；`app/main.py` 替换为真实入口文件；`requirements.txt` 替换为项目依赖文件；`assets/app.icns` 和 `assets/app.ico` 替换为项目中的图标路径；PyInstaller 的 `--name`、macOS 应用名和 Windows 可执行文件名保持与 `APP_NAME` 一致。模板中的 `macos-14`、`macos-13`、`windows-latest` 是构建平台配置，通常不需要修改；如果程序只能在特定 Python 版本运行，只修改 `python-version`。文件名中的 `macos-arm64`、`macos-x64` 和 `windows-x64` 必须保留，因为 Worker 依靠它们匹配用户系统；`${{ github.ref_name }}` 必须保留，它会被替换为当前 GitHub Tag，不能写成固定版本号。完成替换后，将文件保存为产品仓库的 `.github/workflows/build.yaml`，确认仓库 Actions 允许写入 Contents，然后提交代码并推送 Tag，例如 `git tag v1.0.0 && git push origin v1.0.0`。Tag 推送后，三个构建任务会并行执行，最后由发布任务创建同名 GitHub Release 并上传三个安装包；如果 Tag 不符合旧规则也可以触发，因为模板监听所有 Tag。已经创建过的 Tag 不会因修改 workflow 自动重跑，应推送新的 Tag 或在 GitHub Actions 页面手动重新运行。
 
 ```yaml
 name: Build and Release Product
@@ -485,7 +489,7 @@ name: Build and Release Product
 on:
   push:
     tags:
-      - "v*"
+      - "*"
 
 permissions:
   contents: write

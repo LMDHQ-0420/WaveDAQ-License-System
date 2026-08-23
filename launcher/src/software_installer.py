@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import platform
+import plistlib
 import shutil
 import subprocess
 import zipfile
@@ -12,11 +13,45 @@ from src.local_storage import data_dir
 
 def launch(path: Path, arguments: list[str] | None = None) -> subprocess.Popen[bytes]:
     arguments = arguments or []
-    if platform.system() == "Darwin" and path.suffix in {".app", ".dmg", ".pkg"}:
+    if not path.exists():
+        raise RuntimeError(f"找不到已安装程序：{path}")
+    if platform.system() == "Darwin" and path.suffix == ".app":
+        _ensure_macos_app_executable(path)
+        return subprocess.Popen(["open", str(path), "--args", *arguments])
+    if platform.system() == "Darwin" and path.suffix in {".dmg", ".pkg"}:
         return subprocess.Popen(["open", str(path), "--args", *arguments])
     if not os.access(path, os.X_OK) and platform.system() != "Windows":
-        path.chmod(path.stat().st_mode | 0o100)
+        try:
+            path.chmod(path.stat().st_mode | 0o100)
+        except OSError as exc:
+            raise RuntimeError(f"程序没有执行权限，且无法修复：{path}（{exc}）") from exc
     return subprocess.Popen([str(path), *arguments])
+
+
+def _ensure_macos_app_executable(app: Path) -> None:
+    """Make the executable inside a downloaded .app runnable.
+
+    ZIP extraction preserves the archive's file contents but may lose the
+    executable bit. macOS then silently refuses to launch the bundle through
+    Finder/open, so repair the bit before handing the bundle to LaunchServices.
+    """
+    info_path = app / "Contents" / "Info.plist"
+    try:
+        with info_path.open("rb") as stream:
+            info = plistlib.load(stream)
+    except (OSError, ValueError, plistlib.InvalidFileException) as exc:
+        raise RuntimeError(f"应用程序信息损坏，无法启动：{info_path}（{exc}）") from exc
+    executable_name = str(info.get("CFBundleExecutable") or "")
+    if not executable_name or Path(executable_name).name != executable_name:
+        raise RuntimeError("应用程序缺少有效的可执行文件配置")
+    executable = app / "Contents" / "MacOS" / executable_name
+    if not executable.is_file():
+        raise RuntimeError(f"应用程序缺少可执行文件：{executable}")
+    if not os.access(executable, os.X_OK):
+        try:
+            executable.chmod(executable.stat().st_mode | 0o111)
+        except OSError as exc:
+            raise RuntimeError(f"应用程序没有执行权限，且无法修复：{executable}（{exc}）") from exc
 
 
 def _safe_extract_zip(package: Path, destination: Path) -> None:

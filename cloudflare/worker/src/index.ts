@@ -22,7 +22,10 @@ function isExpired(value: string | null): boolean {
 async function fetchLatestGithubRelease(env: Env, repository: string): Promise<GithubRelease> {
   if (!env.GITHUB_TOKEN) throw new Error("服务端未配置 GitHub Token");
   const response = await fetch(`https://api.github.com/repos/${repository}/releases/latest`, { headers: { accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", authorization: `Bearer ${env.GITHUB_TOKEN}`, "user-agent": "WaveDAQ-License-Worker" } });
-  if (!response.ok) throw new Error(`无法读取 GitHub 最新版本 (${response.status})`);
+  if (!response.ok) {
+    if (response.status === 404) throw new Error("GitHub 仓库不存在、没有可用 Release，或 Token 没有访问权限");
+    throw new Error(`无法读取 GitHub 最新版本 (${response.status})`);
+  }
   return await response.json() as GithubRelease;
 }
 
@@ -106,15 +109,23 @@ async function releases(request: Request, env: Env): Promise<Response> {
   const products = await env.DB.prepare("SELECT p.id, p.name, p.description, p.github_repository FROM products p JOIN license_products lp ON lp.product_id = p.id WHERE lp.license_id = ? AND p.status = 'active' AND p.is_frozen = 0").bind(auth.licenseId).all<{ id: string; name: string; description: string; github_repository: string }>();
   const platforms = ["windows-x64", "macos-arm64", "macos-x64"];
   const latestByProduct = new Map<string, GithubRelease>();
-  await Promise.all(products.results.map(async (product) => { latestByProduct.set(product.id, await fetchLatestGithubRelease(env, product.github_repository)); }));
+  const warnings: string[] = [];
+  await Promise.all(products.results.map(async (product) => {
+    try {
+      latestByProduct.set(product.id, await fetchLatestGithubRelease(env, product.github_repository));
+    } catch (e) {
+      warnings.push(`${product.name}：${e instanceof Error ? e.message : "无法读取最新 Release"}`);
+    }
+  }));
   const allowed = products.results.flatMap((product) => platforms.map((platform) => {
     const grant = grants.results.find((item) => item.product_id === product.id);
-    if (!grant) return null;
-    const release = resolveGithubRelease(product.github_repository, product.id, latestByProduct.get(product.id)!, platform);
+    const latest = latestByProduct.get(product.id);
+    if (!grant || !latest) return null;
+    const release = resolveGithubRelease(product.github_repository, product.id, latest, platform);
     if (!release) return null;
     return { ...release, download_url: `/api/download/${encodeURIComponent(release.id)}?license_id=${encodeURIComponent(auth.licenseId)}&product_id=${encodeURIComponent(release.product_id)}&platform=${encodeURIComponent(release.platform)}` };
   })).filter((release): release is ResolvedRelease & { download_url: string } => release !== null);
-  return json({ products: products.results, releases: allowed });
+  return json({ products: products.results, releases: allowed, warnings });
 }
 
 async function refreshLicense(request: Request, env: Env): Promise<Response> {
