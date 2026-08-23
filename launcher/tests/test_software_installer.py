@@ -6,7 +6,7 @@ import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
-from src.software_installer import install_product
+from src.software_installer import _repair_macos_framework_symlinks, install_product
 
 
 class SoftwareInstallerTests(unittest.TestCase):
@@ -62,6 +62,25 @@ class SoftwareInstallerTests(unittest.TestCase):
                 archive.writestr("../../outside.txt", "bad")
             with self.assertRaises(RuntimeError):
                 _safe_extract_zip(traversal, root / "traversal-extracted")
+
+    def test_repairs_flattened_links_across_frameworks_and_resources(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            app = Path(directory) / "Product.app"
+            frameworks = app / "Contents" / "Frameworks"
+            resources = app / "Contents" / "Resources"
+            (frameworks / "Python.framework" / "Versions" / "3.11").mkdir(parents=True)
+            resources.mkdir(parents=True)
+            (frameworks / "Python.framework" / "Versions" / "3.11" / "Python").write_bytes(b"binary")
+            (frameworks / "Python").write_text("Python.framework/Versions/3.11/Python")
+            (frameworks / "base_library.zip").write_text("../Resources/base_library.zip")
+            (resources / "base_library.zip").write_bytes(b"zip")
+            (resources / "Python.framework").write_text("../Frameworks/Python.framework")
+
+            _repair_macos_framework_symlinks(app)
+
+            self.assertTrue((frameworks / "Python").is_symlink())
+            self.assertTrue((frameworks / "base_library.zip").is_symlink())
+            self.assertTrue((resources / "Python.framework").is_symlink())
 
 
 if __name__ == "__main__":

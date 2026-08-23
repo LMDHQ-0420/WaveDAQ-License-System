@@ -19,8 +19,17 @@ def launch(path: Path, arguments: list[str] | None = None) -> subprocess.Popen[b
         raise RuntimeError(f"找不到已安装程序：{path}")
     if platform.system() == "Darwin" and path.suffix == ".app":
         _repair_macos_framework_symlinks(path)
-        _ensure_macos_app_executable(path)
-        return subprocess.Popen(["open", str(path), "--args", *arguments])
+        executable = _ensure_macos_app_executable(path)
+        # Launch the bundle executable directly instead of handing it to
+        # LaunchServices via ``open``.  ``open`` is asynchronous and hides a
+        # crash during Python/PyInstaller startup, leaving the Launcher with
+        # no way to explain why nothing appeared.
+        return subprocess.Popen(
+            [str(executable), *arguments],
+            cwd=str(path),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
     if platform.system() == "Darwin" and path.suffix in {".dmg", ".pkg"}:
         return subprocess.Popen(["open", str(path), "--args", *arguments])
     if not os.access(path, os.X_OK) and platform.system() != "Windows":
@@ -31,7 +40,7 @@ def launch(path: Path, arguments: list[str] | None = None) -> subprocess.Popen[b
     return subprocess.Popen([str(path), *arguments])
 
 
-def _ensure_macos_app_executable(app: Path) -> None:
+def _ensure_macos_app_executable(app: Path) -> Path:
     """Make the executable inside a downloaded .app runnable.
 
     ZIP extraction preserves the archive's file contents but may lose the
@@ -55,6 +64,7 @@ def _ensure_macos_app_executable(app: Path) -> None:
             executable.chmod(executable.stat().st_mode | 0o111)
         except OSError as exc:
             raise RuntimeError(f"应用程序没有执行权限，且无法修复：{executable}（{exc}）") from exc
+    return executable
 
 
 def _repair_macos_framework_symlinks(app: Path) -> None:
@@ -64,29 +74,45 @@ def _repair_macos_framework_symlinks(app: Path) -> None:
     text files containing the link target. PyInstaller's macOS runtime then
     tries to load those text files as Mach-O libraries and exits immediately.
     Only repair short relative targets that resolve to an existing path inside
-    the Frameworks directory.
+    the application bundle. PyInstaller places links in both ``Frameworks``
+    and ``Resources`` (including links between those directories), so limiting
+    the scan to one directory leaves the embedded Python runtime incomplete.
     """
-    frameworks = app / "Contents" / "Frameworks"
-    if not frameworks.is_dir():
+    contents = app / "Contents"
+    if not contents.is_dir():
         return
-    root = frameworks.resolve()
-    for candidate in frameworks.rglob("*"):
-        if not candidate.is_file() or candidate.is_symlink():
-            continue
-        try:
-            content = candidate.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            continue
-        if not content or "\n" in content or "\r" in content or Path(content).is_absolute():
-            continue
-        target = (candidate.parent / content).resolve()
-        if target == root or root not in target.parents or not target.exists():
-            continue
-        try:
-            candidate.unlink()
-            candidate.symlink_to(content)
-        except OSError as exc:
-            raise RuntimeError(f"无法修复应用程序框架链接：{candidate}（{exc}）") from exc
+    root = contents.resolve()
+    # A flattened link can point to another flattened link. Repeating the
+    # bounded pass lets us restore the complete chain regardless of order.
+    for _ in range(3):
+        repaired = 0
+        candidates = list(contents.rglob("*"))
+        for candidate in candidates:
+            if not candidate.is_file() or candidate.is_symlink():
+                continue
+            try:
+                content = candidate.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            if (
+                not content
+                or len(content) > 512
+                or "\n" in content
+                or "\r" in content
+                or Path(content).is_absolute()
+            ):
+                continue
+            target = (candidate.parent / content).resolve()
+            if target == root or root not in target.parents or not target.exists():
+                continue
+            try:
+                candidate.unlink()
+                candidate.symlink_to(content)
+                repaired += 1
+            except OSError as exc:
+                raise RuntimeError(f"无法修复应用程序框架链接：{candidate}（{exc}）") from exc
+        if repaired == 0:
+            break
 
 
 def _safe_extract_zip(package: Path, destination: Path) -> None:

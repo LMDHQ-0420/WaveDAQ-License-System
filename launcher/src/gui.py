@@ -437,11 +437,32 @@ class LibraryPage(QtWidgets.QWidget):
                 )
                 record["security_notice_shown"] = True
                 save_installation(record)
-            launch(target)
+            process = launch(target)
+            # A macOS app can pass Popen successfully and still exit during
+            # PyInstaller/Python startup. Check shortly after launch so the
+            # user gets an actionable error instead of a silent no-op.
+            if process.stderr is not None:
+                QtCore.QTimer.singleShot(1200, lambda: self._check_launch_result(process))
         except Exception as exc:
             message = str(exc) or "未知启动错误"
             self._set_notice(f"打开失败：{message}")
             QtWidgets.QMessageBox.warning(self, "打开失败", message)
+
+    def _check_launch_result(self, process: subprocess.Popen[bytes]) -> None:
+        return_code = process.poll()
+        if return_code is None:
+            return
+        details = ""
+        if process.stderr is not None:
+            try:
+                details = process.stderr.read().decode("utf-8", errors="replace").strip()
+            except (OSError, ValueError):
+                details = ""
+        message = f"程序启动失败（退出码 {return_code}）"
+        if details:
+            message = f"{message}：\n{details}"
+        self._set_notice(f"打开失败：{message}")
+        QtWidgets.QMessageBox.warning(self, "打开失败", message)
 
 
 class MainWindow(QtWidgets.QMainWindow):
