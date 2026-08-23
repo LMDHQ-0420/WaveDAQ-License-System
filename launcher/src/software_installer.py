@@ -17,6 +17,7 @@ def launch(path: Path, arguments: list[str] | None = None) -> subprocess.Popen[b
     if not path.exists():
         raise RuntimeError(f"找不到已安装程序：{path}")
     if platform.system() == "Darwin" and path.suffix == ".app":
+        _repair_macos_framework_symlinks(path)
         _ensure_macos_app_executable(path)
         return subprocess.Popen(["open", str(path), "--args", *arguments])
     if platform.system() == "Darwin" and path.suffix in {".dmg", ".pkg"}:
@@ -53,6 +54,38 @@ def _ensure_macos_app_executable(app: Path) -> None:
             executable.chmod(executable.stat().st_mode | 0o111)
         except OSError as exc:
             raise RuntimeError(f"应用程序没有执行权限，且无法修复：{executable}（{exc}）") from exc
+
+
+def _repair_macos_framework_symlinks(app: Path) -> None:
+    """Repair symlinks flattened by an older ZIP installer.
+
+    Python's ``zipfile.extractall`` used to turn symlink entries into ordinary
+    text files containing the link target. PyInstaller's macOS runtime then
+    tries to load those text files as Mach-O libraries and exits immediately.
+    Only repair short relative targets that resolve to an existing path inside
+    the Frameworks directory.
+    """
+    frameworks = app / "Contents" / "Frameworks"
+    if not frameworks.is_dir():
+        return
+    root = frameworks.resolve()
+    for candidate in frameworks.rglob("*"):
+        if not candidate.is_file() or candidate.is_symlink():
+            continue
+        try:
+            content = candidate.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if not content or "\n" in content or "\r" in content or Path(content).is_absolute():
+            continue
+        target = (candidate.parent / content).resolve()
+        if target == root or root not in target.parents or not target.exists():
+            continue
+        try:
+            candidate.unlink()
+            candidate.symlink_to(content)
+        except OSError as exc:
+            raise RuntimeError(f"无法修复应用程序框架链接：{candidate}（{exc}）") from exc
 
 
 def _safe_extract_zip(package: Path, destination: Path) -> None:
