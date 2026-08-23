@@ -7,7 +7,7 @@ import type { Env, LicenseDocument } from "./types";
 interface ActivateRequest { activation_code: string; device_id: string; device_public_key: string; fingerprint?: string; }
 interface CreateLicenseRequest { license_id?: string; name: string; activation_code: string; product_ids?: string[]; product_id?: string; term?: string; expires_at?: string | null; }
 interface CreateProductRequest { product_id: string; name: string; github_repository_url: string; description?: string; }
-interface UpdateLicenseRequest { term: string; expires_at?: string | null; }
+interface UpdateLicenseRequest { term: string; expires_at?: string | null; product_ids?: string[]; }
 interface UpdateProductRequest { github_repository_url: string; description?: string; }
 interface DeviceAuth { licenseId: string; deviceId: string; publicKey: string; }
 
@@ -240,7 +240,7 @@ async function admin(request: Request, env: Env, path: string): Promise<Response
     if (!result.meta.changes) return error("产品不存在", 404);
     return json({ product_id: productId, deleted: true });
   }
-  if (request.method === "GET" && path === "/licenses") return json({ licenses: (await env.DB.prepare("SELECT l.id, l.name, l.status, l.is_frozen, l.term, l.expires_at, l.created_at, CASE WHEN l.code_ciphertext IS NULL THEN 0 ELSE 1 END AS has_code, GROUP_CONCAT(DISTINCT p.name) AS product_names, MAX(a.activated_at) AS activated_at, GROUP_CONCAT(DISTINCT a.device_id) AS device_ids, MIN(d.created_at) AS first_bound_at FROM licenses l LEFT JOIN license_products lp ON lp.license_id = l.id LEFT JOIN products p ON p.id = lp.product_id LEFT JOIN activations a ON a.license_id = l.id LEFT JOIN devices d ON d.id = a.device_id GROUP BY l.id ORDER BY l.created_at DESC LIMIT 200").all()).results });
+  if (request.method === "GET" && path === "/licenses") return json({ licenses: (await env.DB.prepare("SELECT l.id, l.name, l.status, l.is_frozen, l.term, l.expires_at, l.created_at, CASE WHEN l.code_ciphertext IS NULL THEN 0 ELSE 1 END AS has_code, GROUP_CONCAT(DISTINCT p.name) AS product_names, GROUP_CONCAT(DISTINCT p.id) AS product_ids, MAX(a.activated_at) AS activated_at, GROUP_CONCAT(DISTINCT a.device_id) AS device_ids, MIN(d.created_at) AS first_bound_at FROM licenses l LEFT JOIN license_products lp ON lp.license_id = l.id LEFT JOIN products p ON p.id = lp.product_id LEFT JOIN activations a ON a.license_id = l.id LEFT JOIN devices d ON d.id = a.device_id GROUP BY l.id ORDER BY l.created_at DESC LIMIT 200").all()).results });
   if (request.method === "GET" && path === "/devices") return json({ devices: (await env.DB.prepare("SELECT id, fingerprint, status, created_at, last_seen_at FROM devices ORDER BY created_at DESC LIMIT 200").all()).results });
   if (request.method === "POST" && path === "/licenses") {
     const input = await body<CreateLicenseRequest>(request);
@@ -282,11 +282,23 @@ async function admin(request: Request, env: Env, path: string): Promise<Response
     const input = await body<UpdateLicenseRequest>(request);
     const term = input.term?.trim();
     const expiresAt = input.expires_at?.trim() || null;
+    const productIds = input.product_ids === undefined ? null : [...new Set(input.product_ids.map((value) => value.trim()).filter(Boolean))];
     if (term !== "永久授权" && term !== "自定义") return error("授权期限只能是永久授权或自定义");
     if (term === "永久授权" && expiresAt) return error("永久授权不能设置过期时间");
     if (term === "自定义" && (!expiresAt || !Number.isFinite(Date.parse(expiresAt)) || Date.parse(expiresAt) <= Date.now())) return error("自定义授权必须设置有效的未来过期时间");
-    const result = await env.DB.prepare("UPDATE licenses SET term = ?, expires_at = ? WHERE id = ? AND status != 'revoked'").bind(term, expiresAt, licenseId).run();
-    if (!result.meta.changes) return error("授权不存在或已撤销", 404);
+    if (productIds !== null) {
+      if (productIds.length === 0 || productIds.length > 20) return error("授权产品至少选择一个，最多选择 20 个");
+      const products = await env.DB.prepare(`SELECT id FROM products WHERE status = 'active' AND id IN (${productIds.map(() => "?").join(",")})`).bind(...productIds).all<{ id: string }>();
+      if (products.results.length !== productIds.length) return error("授权产品不存在或已删除");
+    }
+    const license = await env.DB.prepare("SELECT id FROM licenses WHERE id = ? AND status != 'revoked'").bind(licenseId).first<{ id: string }>();
+    if (!license) return error("授权不存在或已撤销", 404);
+    const statements = [env.DB.prepare("UPDATE licenses SET term = ?, expires_at = ? WHERE id = ? AND status != 'revoked'").bind(term, expiresAt, licenseId)];
+    if (productIds !== null) {
+      statements.push(env.DB.prepare("DELETE FROM license_products WHERE license_id = ?").bind(licenseId));
+      statements.push(...productIds.map((productId) => env.DB.prepare("INSERT INTO license_products (license_id, product_id) VALUES (?, ?)").bind(licenseId, productId)));
+    }
+    await env.DB.batch(statements);
     return json({ license_id: licenseId });
   }
   const revokeLicense = path.match(/^\/licenses\/([^/]+)\/revoke$/); if (request.method === "POST" && revokeLicense) { const result = await env.DB.prepare("UPDATE licenses SET status = 'revoked', is_frozen = 0 WHERE id = ? AND status != 'revoked'").bind(revokeLicense[1]).run(); if (!result.meta.changes) return error("授权不存在或已经撤销", 404); return json({ status: "revoked", license_id: revokeLicense[1] }); }

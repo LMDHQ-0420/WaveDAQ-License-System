@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
-type Product = { id: string; name: string; description: string; github_repository: string; status: string; is_frozen: number };
-type License = { id: string; name: string; status: string; is_frozen: number; term: string; expires_at: string | null; created_at: string; has_code: number; product_names: string | null; activated_at: string | null; device_ids: string | null; first_bound_at: string | null };
+type Product = { id: string; name: string; description: string; github_repository: string; status: string; is_frozen: number; created_at: string };
+type License = { id: string; name: string; status: string; is_frozen: number; term: string; expires_at: string | null; created_at: string; has_code: number; product_names: string | null; product_ids: string | null; activated_at: string | null; device_ids: string | null; first_bound_at: string | null };
 type Device = { id: string; fingerprint: string | null; status: string; last_seen_at: string | null };
 
 function App() {
@@ -17,7 +17,7 @@ function App() {
   const [productForm, setProductForm] = useState({ product_id: "", name: "", github_repository_url: "", description: "" });
   const [licenseForm, setLicenseForm] = useState({ name: "", activation_code: "", product_ids: [] as string[], term: "永久授权", expires_at: "" });
   const [productEditor, setProductEditor] = useState<{ item: Product; repository: string; description: string } | null>(null);
-  const [licenseEditor, setLicenseEditor] = useState<{ item: License; term: string; expires_at: string } | null>(null);
+  const [licenseEditor, setLicenseEditor] = useState<{ item: License; term: string; expires_at: string; product_ids: string[] } | null>(null);
   const [codeViewer, setCodeViewer] = useState<{ name: string; code: string } | null>(null);
   const [codeCopied, setCodeCopied] = useState(false);
 
@@ -82,13 +82,14 @@ function App() {
   }
 
   function editLicense(item: License) {
-    setLicenseEditor({ item, term: item.term === "永久" ? "永久授权" : item.term, expires_at: toDateTimeLocal(item.expires_at) });
+    setLicenseEditor({ item, term: item.term === "永久" ? "永久授权" : item.term, expires_at: toDateTimeLocal(item.expires_at), product_ids: item.product_ids?.split(",").filter(Boolean) ?? [] });
   }
 
   async function saveLicenseEdit() {
     if (!licenseEditor) return;
     const expiresAt = licenseEditor.term === "永久授权" ? null : new Date(licenseEditor.expires_at).toISOString();
-    await api(`/licenses/${encodeURIComponent(licenseEditor.item.id)}`, { method: "PATCH", body: JSON.stringify({ term: licenseEditor.term, expires_at: expiresAt }) });
+    if (!licenseEditor.product_ids.length) throw new Error("请至少选择一个授权产品");
+    await api(`/licenses/${encodeURIComponent(licenseEditor.item.id)}`, { method: "PATCH", body: JSON.stringify({ term: licenseEditor.term, expires_at: expiresAt, product_ids: licenseEditor.product_ids }) });
     setLicenseEditor(null); await loadAll();
   }
 
@@ -135,10 +136,10 @@ function App() {
     </section>
 
     <Table title="产品" headers={["产品 ID", "名称", "GitHub 仓库", "说明", "状态", "创建时间", "操作"]} rows={products.map((item) => [item.id, item.name, item.github_repository, item.description || "-", statusLabel(item.status, item.is_frozen, "product"), item.created_at, item.status !== "disabled" ? <><button className="small" onClick={() => editProduct(item)}>修改</button> <button className="secondary small" onClick={() => run(() => toggleProduct(item))}>{item.is_frozen ? "解冻" : "冻结"}</button> <button className="danger small" onClick={() => run(() => deleteProduct(item))}>删除</button></> : "-"])} />
-    <Table title="激活码 / 授权" headers={["名称", "产品", "状态", "授权期限", "过期时间", "激活时间", "绑定设备", "首次绑定", "操作"]} rows={licenses.map((item) => [item.name || "未命名", item.product_names ?? "-", statusLabel(item.status, item.is_frozen, "license"), item.term === "永久" ? "永久授权" : item.term, item.expires_at ?? "永久", item.activated_at ?? "未激活", item.device_ids ?? "未绑定", item.first_bound_at ?? "-", <><button className="small" onClick={() => run(() => viewLicenseCode(item))}>查看</button>{item.status !== "revoked" ? <> <button className="small" onClick={() => editLicense(item)}>修改</button> <button className="secondary small" onClick={() => run(() => toggleLicense(item))}>{item.is_frozen ? "解冻" : "冻结"}</button> <button className="danger small" onClick={() => run(() => revokeLicense(item.id))}>撤销</button></> : <> -</>}</>])} />
+    <Table title="激活码 / 授权" headers={["名称", "产品", "状态", "授权期限", "过期时间", "激活时间", "绑定设备", "首次绑定", "操作"]} rows={licenses.map((item) => [item.name || "未命名", item.product_names ?? "-", statusLabel(item.status, item.is_frozen, "license"), item.term === "永久" ? "永久授权" : item.term, item.expires_at ?? "永久", item.activated_at ?? "未激活", formatDeviceIds(item.device_ids), item.first_bound_at ?? "-", <><button className="small" onClick={() => run(() => viewLicenseCode(item))}>查看</button>{item.status !== "revoked" ? <> <button className="small" onClick={() => editLicense(item)}>修改</button> <button className="secondary small" onClick={() => run(() => toggleLicense(item))}>{item.is_frozen ? "解冻" : "冻结"}</button> <button className="danger small" onClick={() => run(() => revokeLicense(item.id))}>撤销</button></> : <> -</>}</>])} />
     <Table title="设备" headers={["ID", "指纹", "状态", "最后在线", "操作"]} rows={devices.map((item) => [item.id, item.fingerprint ?? "-", item.status, item.last_seen_at ?? "-", <button className="danger" onClick={() => run(() => unbindDevice(item.id))}>解绑</button>])} />
     {productEditor && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setProductEditor(null); }}><section className="modal card" role="dialog" aria-modal="true" aria-labelledby="product-edit-title"><div className="modal-title"><h2 id="product-edit-title">修改产品</h2><button className="icon-button" onClick={() => setProductEditor(null)} aria-label="关闭">×</button></div><p className="form-hint">产品名称：{productEditor.item.name}（不可修改）</p><label>GitHub 仓库链接<input value={productEditor.repository} onChange={(event) => setProductEditor({ ...productEditor, repository: event.target.value })} /></label><label>产品说明<textarea value={productEditor.description} onChange={(event) => setProductEditor({ ...productEditor, description: event.target.value })} maxLength={500} /></label><div className="modal-actions"><button className="secondary" onClick={() => setProductEditor(null)}>取消</button><button onClick={() => run(saveProductEdit)}>保存修改</button></div></section></div>}
-    {licenseEditor && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setLicenseEditor(null); }}><section className="modal card" role="dialog" aria-modal="true" aria-labelledby="license-edit-title"><div className="modal-title"><h2 id="license-edit-title">修改授权</h2><button className="icon-button" onClick={() => setLicenseEditor(null)} aria-label="关闭">×</button></div><p className="form-hint">授权名称：{licenseEditor.item.name || "未命名"}。授权已经激活也可以修改。</p><label>授权期限<select value={licenseEditor.term} onChange={(event) => setLicenseEditor({ ...licenseEditor, term: event.target.value, expires_at: event.target.value === "永久授权" ? "" : licenseEditor.expires_at })}><option>永久授权</option><option>自定义</option></select></label>{licenseEditor.term === "自定义" && <label>过期时间<input type="datetime-local" value={licenseEditor.expires_at} onChange={(event) => setLicenseEditor({ ...licenseEditor, expires_at: event.target.value })} required /></label>}<div className="modal-actions"><button className="secondary" onClick={() => setLicenseEditor(null)}>取消</button><button onClick={() => run(saveLicenseEdit)}>保存修改</button></div></section></div>}
+    {licenseEditor && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setLicenseEditor(null); }}><section className="modal card" role="dialog" aria-modal="true" aria-labelledby="license-edit-title"><div className="modal-title"><h2 id="license-edit-title">修改授权</h2><button className="icon-button" onClick={() => setLicenseEditor(null)} aria-label="关闭">×</button></div><p className="form-hint">授权名称：{licenseEditor.item.name || "未命名"}。授权已经激活也可以修改。</p><label>授权产品<div className="checks">{products.filter((product) => product.status === "active" && (!product.is_frozen || licenseEditor.product_ids.includes(product.id))).map((product) => <label className="check" key={product.id}><input type="checkbox" checked={licenseEditor.product_ids.includes(product.id)} onChange={(event) => setLicenseEditor({ ...licenseEditor, product_ids: event.target.checked ? [...licenseEditor.product_ids, product.id] : licenseEditor.product_ids.filter((id) => id !== product.id) })} />{product.name}{product.is_frozen ? "（冻结）" : ""}</label>)}</div></label><label>授权期限<select value={licenseEditor.term} onChange={(event) => setLicenseEditor({ ...licenseEditor, term: event.target.value, expires_at: event.target.value === "永久授权" ? "" : licenseEditor.expires_at })}><option>永久授权</option><option>自定义</option></select></label>{licenseEditor.term === "自定义" && <label>过期时间<input type="datetime-local" value={licenseEditor.expires_at} onChange={(event) => setLicenseEditor({ ...licenseEditor, expires_at: event.target.value })} required /></label>}<div className="modal-actions"><button className="secondary" onClick={() => setLicenseEditor(null)}>取消</button><button onClick={() => run(saveLicenseEdit)}>保存修改</button></div></section></div>}
     {codeViewer && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setCodeViewer(null); }}><section className="modal card" role="dialog" aria-modal="true" aria-labelledby="code-view-title"><div className="modal-title"><h2 id="code-view-title">查看激活码</h2><button className="icon-button" onClick={() => setCodeViewer(null)} aria-label="关闭">×</button></div><p className="form-hint">授权名称：{codeViewer.name}</p><input className="code-display" value={codeViewer.code} readOnly /><div className="modal-actions"><button className="secondary" onClick={() => setCodeViewer(null)}>关闭</button><button onClick={() => run(copyLicenseCode)}>{codeCopied ? "已复制" : "复制激活码"}</button></div></section></div>}
     <p className="credit">Coding by sunyuxiang25@mails.ucas.edu.cn</p>
   </main>;
@@ -146,6 +147,11 @@ function App() {
 
 function toDateTimeLocal(value: string | null): string {
   return value ? new Date(value).toISOString().slice(0, 16) : "";
+}
+
+function formatDeviceIds(value: string | null): string {
+  if (!value) return "未绑定";
+  return value.split(",").map((id) => id.length > 18 ? `${id.slice(0, 8)}…${id.slice(-8)}` : id).join("、");
 }
 
 function statusLabel(status: string, frozen: number, kind: "product" | "license"): string {
