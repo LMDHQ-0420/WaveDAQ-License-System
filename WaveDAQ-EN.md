@@ -13,7 +13,7 @@ The main window is titled “WaveDAQ”. The left side contains acquisition cont
 | Start and Stop | Start or stop one acquisition |
 | Record list | View, inspect, recollect, and export records |
 | Channel 1–8 | Show or hide an individual channel |
-| Enable peak/valley detection | Show or hide real-time peak and valley markers |
+| Peak detection, Valley detection | Independently show or hide detection; peaks are red crosses and valleys are green crosses |
 | Default Settings | Configure export, channel display, appearance, and the built-in guide |
 | Filter Settings | Configure per-channel noise thresholds and adaptive filtering |
 | Reset | Restore automatic following and the default view range |
@@ -30,7 +30,7 @@ The main window is titled “WaveDAQ”. The left side contains acquisition cont
 1. Make sure the sensor or UDP data source is running.
 2. Open WaveDAQ and confirm that waveforms are arriving.
 3. Select the channels that should be visible.
-4. Enable peak and valley detection if required.
+4. Enable peak detection and valley detection independently if required.
 5. Click **▶ Start**.
 6. The status line shows the record currently being collected.
 
@@ -85,7 +85,7 @@ In **Default Settings → Channel Settings**, enable **Show separately** for a c
 
 ### 4.1 Filter behavior
 
-Click **Filter Settings** in the lower-left area. Check **Enable threshold filtering** and confirm the dialog. The filtered waveform plot then becomes visible.
+Click **Filter Settings** in the lower-left area. Check **Enable threshold filtering**, **Filter positive waves**, or **Filter negative waves** to activate the corresponding filtering. After confirming, the filtered waveform plot becomes visible. If **Hide filtered waveform plot** is selected, filtering still runs but its plot is hidden.
 
 Filtering does not modify the raw record. It only affects the filtered plot and **Export filtered result**.
 
@@ -100,7 +100,7 @@ Thresholds may be negative and may cross zero. For example, `-0.1` and `0.1` sup
 
 ### 4.2 Shared thresholds
 
-Check **Use the same threshold for all eight channels** to synchronize the eight lower inputs and the eight upper inputs separately. When this option is enabled, the largest current lower value is applied to every lower input and the largest current upper value is applied to every upper input.
+Check **Use the same threshold for all eight channels** to synchronize the eight lower inputs and the eight upper inputs separately. When this option is enabled, the smallest current lower value is applied to every lower input and the largest current upper value is applied to every upper input.
 
 Uncheck it to return to independent per-channel values.
 
@@ -131,7 +131,13 @@ lower bound = center - noise radius
 upper bound = center + noise radius
 ```
 
-This is less sensitive to slow drift and occasional spikes than directly using the minimum and maximum values. The sensor must remain still during calibration; real motion would enlarge the estimated noise interval.
+This is less sensitive to slow drift and occasional spikes than directly using the minimum and maximum values. The sensor must remain still during calibration; real motion would enlarge the estimated noise interval. Calibration samples all eight channels, and a failure dialog lists any abnormal channels.
+
+### 4.4 Runtime adaptive filtering
+
+<p align="center"><img src="assets/WaveDAQ-runtime-adaptive.png" width="66%" alt="WaveDAQ runtime adaptive-filter initialization"/></p>
+
+Enable **Runtime adaptive filtering** in Filter Settings to run a five-second initialization every time acquisition starts. During initialization, the main waveform and bottom overview continue to show raw data, while the filtered plot and peak/valley detection produce no output. The initialization samples are retained in the current record and highlighted as a very light yellow region in the main plot. After five seconds, the current filtering and detection settings take effect. If initialization fails, a dialog lists the abnormal channels. **Default Settings → Channel Settings** includes **Hide adaptive-filter initialization background** to hide the yellow region.
 
 ## 5. Peak and valley detection
 
@@ -144,10 +150,10 @@ The **Enable peak/valley detection** checkbox on the left can be switched during
 The detector identifies local extrema on each channel:
 
 - peak: marker value `1`, shown as a thin red cross;
-- valley: marker value `-1`, shown as a thin red cross;
+- valley: marker value `-1`, shown as a thin green cross;
 - ordinary sample: marker value `0`.
 
-During live acquisition, the application uses incremental processing and rechecks only a short overlapping tail instead of rescanning all historical samples. The main plot displays the newest 500 markers by default. The number can be changed using the small **Advanced** button in the lower-left corner of the **Default Settings** window. This only changes the number of visible markers; it does not affect stored or exported results.
+During live acquisition, the application uses incremental processing and rechecks only a short overlapping tail instead of rescanning all historical samples. The main plot displays the newest 500 peak markers and 500 valley markers by default. The two limits can be changed independently using the small **Advanced** button in the lower-left corner of the **Default Settings** window. This only changes the number of visible markers; it does not affect stored or exported results.
 
 ### 5.2 Playback and export
 
@@ -218,7 +224,9 @@ Click **Default Settings** in the lower-left area. It contains three tabs:
 - enable separate channel plots;
 - choose a background color;
 - hide the combined waveform plot;
-- hide the filtered waveform plot.
+- hide the filtered waveform plot;
+- hide the adaptive-filter initialization background;
+- click **Restore Default Settings** in the lower-right corner to restore default colors, order, channel visibility, and plot visibility.
 
 ### 8.2 Export Settings
 
@@ -240,7 +248,7 @@ The **User Guide** tab contains the built-in Chinese operation guide for quick r
 
 ### 8.4 Advanced Settings
 
-The small **Advanced** button in the lower-left corner of the Default Settings window controls how many newest peak/valley markers are shown in the main plot. A larger number shows more red markers and may increase drawing work. It does not limit detection or export.
+The small **Advanced** button in the lower-left corner of the Default Settings window controls the newest peak and valley marker counts independently. A larger number shows more markers and may increase drawing work. It does not limit detection or export.
 
 ## 9. Records and file lifecycle
 
