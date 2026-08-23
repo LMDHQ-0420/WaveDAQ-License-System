@@ -117,14 +117,20 @@ async function releases(request: Request, env: Env): Promise<Response> {
       warnings.push(`${product.name}：${e instanceof Error ? e.message : "无法读取最新 Release"}`);
     }
   }));
-  const allowed = products.results.flatMap((product) => platforms.map((platform) => {
+  const allowed: Array<ResolvedRelease & { download_url: string }> = [];
+  for (const product of products.results) {
     const grant = grants.results.find((item) => item.product_id === product.id);
     const latest = latestByProduct.get(product.id);
-    if (!grant || !latest) return null;
-    const release = resolveGithubRelease(product.github_repository, product.id, latest, platform);
-    if (!release) return null;
-    return { ...release, download_url: `/api/download/${encodeURIComponent(release.id)}?license_id=${encodeURIComponent(auth.licenseId)}&product_id=${encodeURIComponent(release.product_id)}&platform=${encodeURIComponent(release.platform)}` };
-  })).filter((release): release is ResolvedRelease & { download_url: string } => release !== null);
+    if (!grant || !latest) continue;
+    for (const platform of platforms) {
+      try {
+        const release = resolveGithubRelease(product.github_repository, product.id, latest, platform);
+        if (release) allowed.push({ ...release, download_url: `/api/download/${encodeURIComponent(release.id)}?license_id=${encodeURIComponent(auth.licenseId)}&product_id=${encodeURIComponent(release.product_id)}&platform=${encodeURIComponent(release.platform)}` });
+      } catch (e) {
+        warnings.push(`${product.name}：${e instanceof Error ? e.message : "版本资产不可信"}`);
+      }
+    }
+  }
   return json({ products: products.results, releases: allowed, warnings });
 }
 

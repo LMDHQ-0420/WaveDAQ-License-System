@@ -8,6 +8,7 @@ import stat
 import subprocess
 import zipfile
 from pathlib import Path
+from pathlib import PurePosixPath
 
 from src.local_storage import data_dir
 
@@ -92,32 +93,53 @@ def _safe_extract_zip(package: Path, destination: Path) -> None:
     destination.mkdir(parents=True, exist_ok=True)
     root = destination.resolve()
     with zipfile.ZipFile(package) as archive:
-        for member in archive.infolist():
+        members = archive.infolist()
+        symlink_names: set[str] = set()
+        for member in members:
+            _validate_archive_name(member.filename)
             target = destination / member.filename
-            resolved_target = target.resolve()
+            resolved_target = target.resolve(strict=False)
             if resolved_target != root and root not in resolved_target.parents:
                 raise RuntimeError("安装包包含不安全的文件路径")
             if _zip_member_is_symlink(member):
                 link_target = archive.read(member).decode("utf-8")
-                resolved_link = (target.parent / link_target).resolve()
+                if Path(link_target).is_absolute():
+                    raise RuntimeError("安装包包含不安全的绝对符号链接")
+                resolved_link = (target.parent / link_target).resolve(strict=False)
                 if resolved_link != root and root not in resolved_link.parents:
                     raise RuntimeError("安装包包含不安全的符号链接")
-        for member in archive.infolist():
+                symlink_names.add(member.filename.rstrip("/"))
+        for member in members:
+            member_path = PurePosixPath(member.filename)
+            if any(str(PurePosixPath(*member_path.parts[:index])) in symlink_names for index in range(1, len(member_path.parts))):
+                raise RuntimeError("安装包不能在符号链接目录下写入文件")
+        for member in members:
             target = destination / member.filename
             if member.is_dir():
                 target.mkdir(parents=True, exist_ok=True)
                 continue
-            target.parent.mkdir(parents=True, exist_ok=True)
             if _zip_member_is_symlink(member):
-                target.unlink(missing_ok=True)
-                target.symlink_to(archive.read(member).decode("utf-8"))
                 continue
+            target.parent.mkdir(parents=True, exist_ok=True)
             with archive.open(member) as source, target.open("wb") as output:
                 shutil.copyfileobj(source, output)
+        for member in members:
+            if not _zip_member_is_symlink(member):
+                continue
+            target = destination / member.filename
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.unlink(missing_ok=True)
+            target.symlink_to(archive.read(member).decode("utf-8"))
 
 
 def _zip_member_is_symlink(member: zipfile.ZipInfo) -> bool:
     return stat.S_IFMT(member.external_attr >> 16) == stat.S_IFLNK
+
+
+def _validate_archive_name(name: str) -> None:
+    path = PurePosixPath(name)
+    if not name or path.is_absolute() or ".." in path.parts:
+        raise RuntimeError("安装包包含不安全的文件路径")
 
 
 def _find_launch_target(root: Path, product_id: str, platform_id: str) -> Path:
@@ -137,6 +159,9 @@ def _find_launch_target(root: Path, product_id: str, platform_id: str) -> Path:
 
 def install_product(package: Path, product_id: str, platform_id: str, version: str) -> Path:
     """Install a downloaded product into Launcher-owned private storage."""
+    _validate_local_component(product_id, "产品 ID")
+    _validate_local_component(platform_id, "平台标识")
+    _validate_local_component(version, "版本号")
     versions_root = data_dir() / "products" / product_id / platform_id
     versions_root.mkdir(parents=True, exist_ok=True)
     target = versions_root / version
@@ -169,3 +194,9 @@ def install_product(package: Path, product_id: str, platform_id: str, version: s
     except Exception:
         shutil.rmtree(temporary, ignore_errors=True)
         raise
+
+
+def _validate_local_component(value: str, label: str) -> None:
+    path = Path(str(value))
+    if not value or path.name != value or value in {".", ".."} or "/" in value or "\\" in value:
+        raise RuntimeError(f"{label}无效")

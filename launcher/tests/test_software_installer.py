@@ -43,6 +43,26 @@ class SoftwareInstallerTests(unittest.TestCase):
             self.assertTrue(extracted.is_symlink())
             self.assertEqual(extracted.readlink(), Path("Python.framework/Versions/3.11/Python"))
 
+    def test_zip_product_rejects_traversal_and_symlink_parent_write(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / "unsafe.zip"
+            link = zipfile.ZipInfo("Product.app/Contents/Frameworks/outside")
+            link.create_system = 3
+            link.external_attr = (0o120777 << 16) | 0xA000
+            with zipfile.ZipFile(package, "w") as archive:
+                archive.writestr(link, "../../outside")
+                archive.writestr("Product.app/Contents/Frameworks/outside/payload", "bad")
+            with self.assertRaises(RuntimeError):
+                from src.software_installer import _safe_extract_zip
+                _safe_extract_zip(package, root / "extracted")
+
+            traversal = root / "traversal.zip"
+            with zipfile.ZipFile(traversal, "w") as archive:
+                archive.writestr("../../outside.txt", "bad")
+            with self.assertRaises(RuntimeError):
+                _safe_extract_zip(traversal, root / "traversal-extracted")
+
 
 if __name__ == "__main__":
     unittest.main()

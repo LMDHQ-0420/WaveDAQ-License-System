@@ -53,6 +53,11 @@ class SignedRequestTests(unittest.TestCase):
             with self.assertRaisesRegex(LicenseApiError, "网络波动，请重试"):
                 LicenseApi("https://example.test").activate("CODE", "device", "public", "fingerprint")
 
+    def test_timeout_uses_retry_message(self) -> None:
+        with patch("src.api_client.urlopen", side_effect=TimeoutError("timed out")):
+            with self.assertRaisesRegex(LicenseApiError, "网络波动，请重试"):
+                LicenseApi("https://example.test").activate("CODE", "device", "public", "fingerprint")
+
 
 if __name__ == "__main__":
     unittest.main()

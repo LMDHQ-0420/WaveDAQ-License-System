@@ -41,7 +41,7 @@ class LicenseApi:
         try:
             with urlopen(request, timeout=self.timeout, context=self.ssl_context) as response:
                 return json.loads(response.read().decode())
-        except (HTTPError, URLError) as exc:
+        except (HTTPError, URLError, TimeoutError, ssl.SSLError, ConnectionError) as exc:
             if isinstance(exc, HTTPError):
                 try:
                     detail = json.loads(exc.read().decode()).get("error", str(exc))
@@ -66,7 +66,7 @@ class LicenseApi:
         try:
             with urlopen(request, timeout=self.timeout, context=self.ssl_context) as response:
                 return json.loads(response.read().decode())
-        except (HTTPError, URLError) as exc:
+        except (HTTPError, URLError, TimeoutError, ssl.SSLError, ConnectionError) as exc:
             detail = NETWORK_RETRY_MESSAGE
             if isinstance(exc, HTTPError):
                 try:
