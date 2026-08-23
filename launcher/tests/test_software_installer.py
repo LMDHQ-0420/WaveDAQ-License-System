@@ -26,6 +26,23 @@ class SoftwareInstallerTests(unittest.TestCase):
             self.assertTrue(target.exists())
             self.assertFalse(old.exists())
 
+    def test_zip_product_preserves_macos_symlinks(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / "product.zip"
+            link = zipfile.ZipInfo("Product.app/Contents/Frameworks/Python")
+            link.create_system = 3
+            link.external_attr = (0o120777 << 16) | 0xA000
+            with zipfile.ZipFile(package, "w") as archive:
+                archive.writestr(link, "Python.framework/Versions/3.11/Python")
+                archive.writestr("Product.app/Contents/Frameworks/Python.framework/Versions/3.11/Python", "binary")
+            destination = root / "extracted"
+            from src.software_installer import _safe_extract_zip
+            _safe_extract_zip(package, destination)
+            extracted = destination / "Product.app/Contents/Frameworks/Python"
+            self.assertTrue(extracted.is_symlink())
+            self.assertEqual(extracted.readlink(), Path("Python.framework/Versions/3.11/Python"))
+
 
 if __name__ == "__main__":
     unittest.main()

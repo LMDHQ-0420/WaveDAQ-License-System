@@ -4,6 +4,7 @@ import os
 import platform
 import plistlib
 import shutil
+import stat
 import subprocess
 import zipfile
 from pathlib import Path
@@ -59,10 +60,31 @@ def _safe_extract_zip(package: Path, destination: Path) -> None:
     root = destination.resolve()
     with zipfile.ZipFile(package) as archive:
         for member in archive.infolist():
-            target = (destination / member.filename).resolve()
-            if target != root and root not in target.parents:
+            target = destination / member.filename
+            resolved_target = target.resolve()
+            if resolved_target != root and root not in resolved_target.parents:
                 raise RuntimeError("安装包包含不安全的文件路径")
-        archive.extractall(destination)
+            if _zip_member_is_symlink(member):
+                link_target = archive.read(member).decode("utf-8")
+                resolved_link = (target.parent / link_target).resolve()
+                if resolved_link != root and root not in resolved_link.parents:
+                    raise RuntimeError("安装包包含不安全的符号链接")
+        for member in archive.infolist():
+            target = destination / member.filename
+            if member.is_dir():
+                target.mkdir(parents=True, exist_ok=True)
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if _zip_member_is_symlink(member):
+                target.unlink(missing_ok=True)
+                target.symlink_to(archive.read(member).decode("utf-8"))
+                continue
+            with archive.open(member) as source, target.open("wb") as output:
+                shutil.copyfileobj(source, output)
+
+
+def _zip_member_is_symlink(member: zipfile.ZipInfo) -> bool:
+    return stat.S_IFMT(member.external_attr >> 16) == stat.S_IFLNK
 
 
 def _find_launch_target(root: Path, product_id: str, platform_id: str) -> Path:
