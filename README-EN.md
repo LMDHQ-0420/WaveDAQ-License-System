@@ -36,6 +36,7 @@
 - 🔐 **[2026/08/21]** WaveDAQ-License-System released! It provides offline device licensing, activation-code management, software distribution, and a cross-platform Launcher.
 - 📊 **[2026/08/22]** WaveDAQ 4.0 released! New data-analysis features include peak/valley detection, adaptive filtering, CSV import, and time and detection-result export.
 - ⚙️ **[2026/08/23]** WaveDAQ 4.1 released! It adds runtime adaptive-filter initialization, full eight-channel noise calibration, retained initialization waveforms, and configurable initialization highlighting for more stable continuous acquisition.
+- 🚀 **[2026/08/24]** WaveDAQ-License-System v1.1 released! Launcher startup diagnostics, software distribution, and cross-platform packaging were improved.
 
 ## User Guide
 
