@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import binascii
 import json
 import os
 import platform
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from cryptography.exceptions import InvalidTag
 
 from .local_crypto import decrypt_text, encrypt_text
 
@@ -60,7 +65,7 @@ def read_protected_json(path: Path) -> dict[str, Any] | None:
     try:
         value = json.loads(decrypt_text(path.read_text(encoding="utf-8")))
         return value if isinstance(value, dict) else None
-    except (OSError, ValueError):
+    except (OSError, ValueError, InvalidTag, binascii.Error):
         return None
 
 
@@ -74,6 +79,34 @@ def write_protected_json(path: Path, value: Any) -> None:
     except OSError:
         pass
     temporary.replace(path)
+
+
+def backup_and_reset_binding() -> Path:
+    """Set aside local identity and authorization data for a fresh activation.
+
+    Server-side activations are intentionally untouched. Installed programs and
+    downloaded packages are also left in place.
+    """
+    root = data_dir()
+    backup = root / "recovery" / f"{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}-{uuid.uuid4().hex[:8]}"
+    names = (
+        "device.json", "license.json", "licenses", "catalogs", "clock.dat",
+        "revoked_licenses.json", "installations.json",
+    )
+    moved: list[tuple[Path, Path]] = []
+    try:
+        backup.mkdir(parents=True)
+        for name in names:
+            source = root / name
+            if source.exists():
+                destination = backup / name
+                source.rename(destination)
+                moved.append((source, destination))
+    except OSError:
+        for source, destination in reversed(moved):
+            destination.rename(source)
+        raise
+    return backup
 
 
 def save_license(document: dict[str, Any], make_active: bool = True) -> Path:

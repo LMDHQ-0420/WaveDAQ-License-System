@@ -5,7 +5,7 @@
 [Setup]
 AppId={{B9B3E8D1-46F9-4A7A-BD6D-7DC0C0D6E0A1}
 AppName=WaveDAQ-Launcher
-AppVersion=1.0.0
+AppVersion=1.2.0
 AppPublisher=WaveDAQ
 DefaultDirName={autopf}\WaveDAQ-Launcher
 DefaultGroupName=WaveDAQ-Launcher

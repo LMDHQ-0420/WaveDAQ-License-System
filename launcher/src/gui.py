@@ -12,7 +12,7 @@ from src.api_client import LicenseApi, LicenseApiError
 from src.config import API_URL, SERVER_PUBLIC_KEY
 from src.device_identity import device_fingerprint, load_or_create
 from src.license_verifier import verify_license
-from src.local_storage import data_dir, load_catalogs, load_installations, load_licenses, mark_license_revoked, save_catalog, save_installation, save_license, set_active_license
+from src.local_storage import backup_and_reset_binding, data_dir, load_catalogs, load_installations, load_licenses, mark_license_revoked, save_catalog, save_installation, save_license, set_active_license
 from src.software_installer import install_product, launch
 
 
@@ -466,7 +466,7 @@ class LibraryPage(QtWidgets.QWidget):
 
 
 class MainWindow(QtWidgets.QMainWindow):
-    def __init__(self) -> None:
+    def __init__(self, startup_error: str = "") -> None:
         super().__init__()
         self.setWindowTitle("WaveDAQ Launcher")
         self.resize(640, 360)
@@ -485,6 +485,10 @@ class MainWindow(QtWidgets.QMainWindow):
         separator.setFrameShape(QtWidgets.QFrame.Shape.HLine)
         separator.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
         central_layout.addWidget(separator)
+        recovery = QtWidgets.QPushButton("清除本机绑定并重新激活")
+        recovery.setToolTip("备份本机授权资料，清除旧设备身份后输入新的激活码")
+        recovery.clicked.connect(self.reset_binding)
+        central_layout.addWidget(recovery)
         credit = QtWidgets.QLabel("Coding by sunyuxiang25@mails.ucas.edu.cn")
         credit.setAlignment(QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter)
         credit_font = credit.font()
@@ -500,8 +504,37 @@ class MainWindow(QtWidgets.QMainWindow):
         self.activation.activation_warning.connect(self.library._set_notice)
         self.activation.cancelled.connect(self.show_library)
         self.library.add_key.connect(self.show_activation)
-        if load_licenses(): self.show_library()
+        if startup_error:
+            self.show_activation()
+            self.activation._set_status(f"本机授权无法读取：{startup_error}\n请点击下方“清除本机绑定并重新激活”，然后输入新的激活码。")
+        elif load_licenses(): self.show_library()
         else: self.show_activation()
+
+    def reset_binding(self) -> None:
+        if self.activation.thread and self.activation.thread.isRunning():
+            self.activation._set_status("激活正在进行，请稍后再清除本机绑定。")
+            return
+        if self.library.thread and self.library.thread.isRunning():
+            self.library._set_notice("当前操作正在进行，请稍后再清除本机绑定。")
+            return
+        answer = QtWidgets.QMessageBox.question(
+            self, "清除本机绑定",
+            "将备份并清除这台电脑的本机授权、设备身份和安装记录，然后可以输入新的激活码。\n"
+            "已安装的软件文件不会删除，但重新激活后可能需要重新安装才能从 Launcher 启动。"
+            "旧激活码在服务器上的绑定不会自动解除；如需继续使用旧码，请联系管理员解绑。\n\n确定继续吗？",
+            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+            QtWidgets.QMessageBox.StandardButton.No,
+        )
+        if answer != QtWidgets.QMessageBox.StandardButton.Yes:
+            return
+        try:
+            backup = backup_and_reset_binding()
+            load_or_create()
+            self.show_activation()
+            self.activation._set_status(f"本机绑定已清除。请输入新的、未使用的激活码。旧资料已备份到：{backup}")
+        except Exception as exc:
+            self.show_activation()
+            self.activation._set_status(f"清除本机绑定失败：{exc}")
 
     def show_activation(self) -> None:
         self.activation.set_cancel_visible(bool(load_licenses()))
@@ -515,13 +548,12 @@ class MainWindow(QtWidgets.QMainWindow):
 def run_gui() -> int:
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     app.setApplicationName("WaveDAQ Software Center")
+    startup_error = ""
     try:
-        # Identity creation is local only. If an identity already exists, this
-        # also verifies the machine-code binding before showing any page.
+        # A damaged or mismatched identity must not hide the recovery controls.
         load_or_create()
     except Exception as exc:
-        QtWidgets.QMessageBox.critical(None, "无法启动", str(exc))
-        return 1
-    window = MainWindow()
+        startup_error = str(exc)
+    window = MainWindow(startup_error=startup_error)
     window.show()
     return app.exec()

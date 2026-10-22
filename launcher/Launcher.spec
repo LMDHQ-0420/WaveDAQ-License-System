@@ -32,7 +32,7 @@ pyz = PYZ(a.pure)
 if sys.platform == "darwin":
     exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="WaveDAQ-Launcher", debug=False, strip=False, upx=True, console=False)
     coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=True, name="WaveDAQ-Launcher")
-    app = BUNDLE(coll, name="WaveDAQ-Launcher.app", icon=str(app_icon), bundle_identifier="com.lmdhq.wavedaq.launcher", info_plist={"CFBundleShortVersionString": "1.0.0", "NSHighResolutionCapable": True})
+    app = BUNDLE(coll, name="WaveDAQ-Launcher.app", icon=str(app_icon), bundle_identifier="com.lmdhq.wavedaq.launcher", info_plist={"CFBundleShortVersionString": "1.2.0", "NSHighResolutionCapable": True})
 else:
     exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="WaveDAQ-Launcher", debug=False, strip=False, upx=True, console=False, icon=str(app_icon))
     coll = COLLECT(exe, a.binaries, a.zipfiles, a.datas, strip=False, upx=True, name="WaveDAQ-Launcher")

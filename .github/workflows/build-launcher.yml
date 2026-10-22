@@ -10,6 +10,21 @@ permissions:
   contents: write
 
 jobs:
+  test-launcher:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: launcher
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install -r launcher/requirements.txt
+      - name: Test Launcher
+        run: python -m unittest discover -s launcher/tests -v
+
   build-mac-arm64:
     runs-on: macos-latest
     steps:
@@ -97,9 +112,10 @@ jobs:
           if-no-files-found: error
 
   publish-release:
-    needs: [build-mac-arm64, build-mac-x64, build-windows]
+    needs: [test-launcher, build-mac-arm64, build-mac-x64, build-windows]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: release-assets
@@ -110,4 +126,5 @@ jobs:
           draft: false
           prerelease: false
           fail_on_unmatched_files: true
+          body_path: .github/releases/${{ github.ref_name }}.md
           files: release-assets/*
