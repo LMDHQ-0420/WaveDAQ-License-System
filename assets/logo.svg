@@ -1,6 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 108 108">
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="4.5 4.5 99 99">
   <title>WaveDAQ</title>
-  <rect width="108" height="108" fill="#0C121B"/>
-  <rect x="6" y="6" width="96" height="96" rx="17" fill="none" stroke="#52DFC6" stroke-width="3"/>
+  <rect x="6" y="6" width="96" height="96" rx="17" fill="#0C121B" stroke="#52DFC6" stroke-width="3"/>
   <path d="M12 56H29L38 29L49 80L60 40L69 56H96" fill="none" stroke="#52DFC6" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
