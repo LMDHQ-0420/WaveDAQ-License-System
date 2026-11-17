@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any, Callable
 
@@ -548,6 +549,8 @@ class MainWindow(QtWidgets.QMainWindow):
 def run_gui() -> int:
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     app.setApplicationName("WaveDAQ Software Center")
+    resource_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2] / "assets"))
+    app.setWindowIcon(QtGui.QIcon(str(resource_dir / "logo.png")))
     startup_error = ""
     try:
         # A damaged or mismatched identity must not hide the recovery controls.

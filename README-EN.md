@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" width="120" alt="License System Logo"/>
+  <a href="assets/logo.svg"><img src="assets/logo.png" width="120" alt="WaveDAQ License System waveform logo"/></a>
 </p>
 
 <h1 align="center">WaveDAQ License System</h1>
